@@ -1,7 +1,11 @@
-# Byte-compiled / optimized / DLL files
+# Python artifacts
 __pycache__/
 *.py[cod]
 *$py.class
+
+# Data and Logs (if mounted locally)
+data/
+logs/
 
 # C extensions
 *.so
@@ -172,3 +176,9 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# IDE / Editor specific files
+.vscode/
+.idea/
+*.swp
+*.swo

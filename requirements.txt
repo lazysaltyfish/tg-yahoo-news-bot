@@ -1,0 +1,7 @@
+# Core application libraries
+requests>=2.20.0
+python-telegram-bot[ext]>=20.0 # Use v20+ for async features
+schedule>=1.0.0
+
+# fcntl is part of the standard library on POSIX systems (like Linux)
+# No need to list it here.
