@@ -3,6 +3,8 @@ import time
 import schedule
 import asyncio
 import re
+import pytz
+from datetime import datetime
 from app import config, logger_setup, api_client, data_handler, telegram_poster
 
 # --- Setup ---
@@ -92,8 +94,33 @@ async def run_check():
         escaped_title = escape_markdown_v2(translated_title)
         escaped_link = escape_markdown_v2(article_link)
         escaped_content = escape_markdown_v2(translated_content)
-        publication_time = content_data.get('publication_time', '') if content_data else ''
-        escaped_time = escape_markdown_v2(publication_time)
+
+        # --- Format Publication Time ---
+        formatted_time_str = ""
+        publication_time_iso = content_data.get('publication_time', '') if content_data else ''
+        if publication_time_iso:
+            try:
+                # Parse the ISO 8601 string (assuming 'Z' means UTC)
+                # Python < 3.11 doesn't handle 'Z' directly in fromisoformat, replace it
+                if publication_time_iso.endswith('Z'):
+                     publication_time_iso = publication_time_iso[:-1] + '+00:00'
+                utc_time = datetime.fromisoformat(publication_time_iso)
+                # Ensure it's timezone-aware (UTC)
+                if utc_time.tzinfo is None:
+                    utc_time = utc_time.replace(tzinfo=pytz.utc)
+
+                # Convert to JST (Asia/Tokyo)
+                jst = pytz.timezone('Asia/Tokyo')
+                jst_time = utc_time.astimezone(jst)
+
+                # Format as YYYY-MM-DD HH:MM
+                formatted_time_str = jst_time.strftime('%Y-%m-%d %H:%M')
+            except ValueError:
+                logger.warning(f"Could not parse publication time: {publication_time_iso}")
+            except Exception as time_e:
+                 logger.error(f"Error formatting time '{publication_time_iso}': {time_e}")
+
+        escaped_time = escape_markdown_v2(formatted_time_str) # Escape the formatted JST time
 
         # Construct the message (adjust formatting as desired)
         message = f"*{escaped_title}*\n\n"
@@ -117,8 +144,8 @@ async def run_check():
             logger.error(f"Failed to post article to Telegram: {article_link}")
             # Consider retry logic here? For now, we just log and move on.
 
-        # Optional: Add a small delay between posts to avoid rate limiting
-        await asyncio.sleep(2) # Sleep for 2 seconds
+        # A small delay between posts to avoid rate limiting
+        await asyncio.sleep(5) # Sleep for 5 seconds
 
     logger.info(f"Finished news check run. Processed {processed_count} new articles.")
 

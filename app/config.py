@@ -10,7 +10,7 @@ TELEGRAM_CHANNEL_ID = os.environ.get("TELEGRAM_CHANNEL_ID")
 YAHOO_RANKING_BASE_URL = os.environ.get("YAHOO_RANKING_BASE_URL") # Added for ranking API parameter
 
 # Optional variables with defaults
-DEFAULT_POSTED_ARTICLES_FILE = "/data/posted_articles.json"
+DEFAULT_POSTED_ARTICLES_FILE = "data/posted_articles.json"
 POSTED_ARTICLES_FILE = os.environ.get("POSTED_ARTICLES_FILE", DEFAULT_POSTED_ARTICLES_FILE)
 
 DEFAULT_LOG_LEVEL = "DEBUG"

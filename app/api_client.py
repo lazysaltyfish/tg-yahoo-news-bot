@@ -158,7 +158,7 @@ def translate_text(text_to_translate: str) -> str | None:
         logger.warning("translate_text called with empty input.")
         return "" # Return empty string for empty input
 
-    logger.info(f"Translating text (first 50 chars): {text_to_translate[:50]}...")
+    logger.debug(f"Translating text (first 50 chars): {text_to_translate[:50]}...")
     endpoint = "/translate"
     payload = {'text': text_to_translate}
     data = _make_request("POST", endpoint, json_data=payload)
@@ -178,5 +178,5 @@ def translate_text(text_to_translate: str) -> str | None:
          logger.error(f"Expected 'translated_text' to be a string, but got {type(translated)}")
          return None
 
-    logger.info("Successfully translated text.")
+    logger.debug("Successfully translated text.")
     return translated
