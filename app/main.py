@@ -5,7 +5,7 @@ import asyncio
 import re
 import pytz
 from datetime import datetime
-from app import config, logger_setup, api_client, data_handler, telegram_poster
+from app import config, logger_setup, api_client, data_handler, telegram_poster, openai_translator
 
 # --- Setup ---
 logger_setup.setup_logging()
@@ -64,36 +64,44 @@ async def run_check():
         original_title = article.get('title', 'No Title Provided')
         logger.info(f"Processing new article: {original_title} ({article_link})")
 
-        # --- Fetch and Translate Article Body ---
-        content_to_translate = ""
-        translated_content = ""
+        # --- Fetch Article Content ---
         content_data = api_client.get_article_content(article_link)
+        original_body = ""
         if content_data and 'body' in content_data:
             body_text = content_data['body']
             if body_text and isinstance(body_text, str):
-                 translated_content = api_client.translate_text(body_text)
-                 if not translated_content:
-                      logger.warning(f"Failed to translate body for {article_link}.")
-                      translated_content = "" # Ensure it's an empty string if translation fails
+                original_body = body_text
             else:
-                 logger.warning(f"Article body is empty or not a string for {article_link}.")
+                logger.warning(f"Article body is empty or not a string for {article_link}.")
         else:
-            logger.warning(f"Could not get body content for {article_link}. Skipping content translation.")
+            logger.warning(f"Could not get body content for {article_link}.")
+            # Continue even without body, maybe title translation is enough? Or skip?
+            # Let's try translating title only if body is missing.
 
+        # 5. Translate Title, Body and Generate Hashtags using OpenAI
+        logger.info(f"Requesting translation and hashtags from OpenAI for: {article_link}")
+        translation_result = await openai_translator.translate_and_summarize_article(
+            title=original_title,
+            body=original_body # Pass empty string if body wasn't found
+        )
 
-        # 5. Translate Title
-        translated_title = api_client.translate_text(original_title)
-        # Note: translated_content is handled above
+        if not translation_result:
+            logger.error(f"Failed to get translation/hashtags from OpenAI for {article_link}. Skipping article.")
+            continue # Skip this article if OpenAI call fails
 
-        if not translated_title:
-            logger.error(f"Failed to translate title for {article_link}. Skipping article.")
-            continue # Skip this article if title translation fails
+        translated_title = translation_result.get('translated_title', '')
+        translated_body = translation_result.get('translated_body', '')
+        hashtags = translation_result.get('hashtags', [])
+
+        if not translated_title: # Title is essential
+             logger.error(f"OpenAI did not return a translated title for {article_link}. Skipping article.")
+             continue
 
         # 6. Format Message
         # Escape necessary components for MarkdownV2
         escaped_title = escape_markdown_v2(translated_title)
         escaped_link = escape_markdown_v2(article_link)
-        escaped_content = escape_markdown_v2(translated_content)
+        escaped_content = escape_markdown_v2(translated_body)
 
         # --- Format Publication Time ---
         formatted_time_str = ""
