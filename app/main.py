@@ -133,12 +133,19 @@ async def run_check():
 
         # 7. Post to Telegram
         logger.debug(f"Formatted message for {article_link}:\n{message}")
-        success = await telegram_poster.post_message(message)
+        # Returns message_id on success, None on failure
+        message_id = await telegram_poster.post_message(message)
 
-        # 8. Update posted articles file if successful
-        if success:
-            logger.info(f"Successfully posted article to Telegram: {article_link}")
-            data_handler.add_posted_article(config.POSTED_ARTICLES_FILE, article_link, original_title)
+        # 8. Update posted articles file if successful (message_id is not None)
+        if message_id is not None:
+            logger.info(f"Successfully posted article to Telegram (Msg ID: {message_id}): {article_link}")
+            # Pass the message_id to the data handler
+            data_handler.add_posted_article(
+                filepath=config.POSTED_ARTICLES_FILE,
+                url=article_link,
+                title=original_title, # Still store original title for reference? Or translated? Let's stick to original for now.
+                message_id=message_id
+            )
             processed_count += 1
         else:
             logger.error(f"Failed to post article to Telegram: {article_link}")

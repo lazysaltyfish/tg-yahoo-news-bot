@@ -13,7 +13,8 @@ def load_posted_articles(filepath: str) -> dict:
         filepath: The path to the JSON file.
 
     Returns:
-        A dictionary mapping posted article URLs to their titles.
+        A dictionary mapping posted article URLs to a sub-dictionary
+        containing 'title' and 'tg_channel_msg_id'.
         Returns an empty dictionary if the file doesn't exist or is invalid.
     """
     if not os.path.exists(filepath):
@@ -45,7 +46,7 @@ def load_posted_articles(filepath: str) -> dict:
         return {}
 
 
-def add_posted_article(filepath: str, url: str, title: str):
+def add_posted_article(filepath: str, url: str, title: str, message_id: int):
     """
     Adds a new article URL and title to the JSON file.
     Uses file locking to prevent race conditions during write.
@@ -54,6 +55,7 @@ def add_posted_article(filepath: str, url: str, title: str):
         filepath: The path to the JSON file.
         url: The URL of the article to add.
         title: The title of the article to add.
+        message_id: The Telegram message ID associated with this article.
     """
     try:
         # Ensure the directory exists
@@ -91,8 +93,11 @@ def add_posted_article(filepath: str, url: str, title: str):
 
                 # Add new entry
                 if url not in current_data:
-                    current_data[url] = title
-                    logger.info(f"Adding article to {filepath}: {url}")
+                    current_data[url] = {
+                        "title": title,
+                        "tg_channel_msg_id": message_id
+                    }
+                    logger.info(f"Adding article to {filepath}: {url} (Msg ID: {message_id})")
                 else:
                     logger.debug(f"Article already exists in {filepath}, not adding again: {url}")
                     return # No need to write if already present

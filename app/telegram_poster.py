@@ -20,7 +20,7 @@ async def post_message(message: str):
         message: The text message to send. Supports MarkdownV2 formatting.
 
     Returns:
-        True if the message was sent successfully, False otherwise.
+        The message_id of the sent message if successful, None otherwise.
     """
     if not config.TELEGRAM_BOT_TOKEN or not config.TELEGRAM_CHANNEL_ID:
         logger.error("Telegram Bot Token or Channel ID is not configured. Cannot send message.")
@@ -36,21 +36,23 @@ async def post_message(message: str):
     try:
         # Note: Sending messages requires an async context if using python-telegram-bot v20+
         # The main loop will need to handle the async execution.
-        await bot.send_message(
+        # Store the returned Message object
+        sent_message = await bot.send_message(
             chat_id=config.TELEGRAM_CHANNEL_ID,
             text=message,
             parse_mode=ParseMode.MARKDOWN_V2 # Use MarkdownV2 for formatting
             # Consider adding disable_web_page_preview=True if desired
         )
-        logger.info(f"Successfully sent message to Telegram channel {config.TELEGRAM_CHANNEL_ID}.")
-        return True
+        logger.info(f"Successfully sent message (ID: {sent_message.message_id}) to Telegram channel {config.TELEGRAM_CHANNEL_ID}.")
+        # Return the message_id
+        return sent_message.message_id
     except BadRequest as e: # Catch BadRequest specifically
         # Log the specific error and the message content
         log_message = f"Telegram BadRequest sending message to {config.TELEGRAM_CHANNEL_ID}: {e}"
         log_message += f"\nProblematic message content:\n---\n{message}\n---"
         logger.error(log_message) # Log as error, traceback might not be needed for parsing errors
         # Consider if other specific handling is needed for BadRequest
-        return False # Return False on BadRequest
+        return None # Return None on BadRequest
     except TelegramError as e:
         # Catch other Telegram API errors (e.g., invalid token, chat not found, bot blocked)
         logger.exception(f"Telegram API error sending message to {config.TELEGRAM_CHANNEL_ID}: {e}")
@@ -59,11 +61,11 @@ async def post_message(message: str):
             logger.error("The configured TELEGRAM_CHANNEL_ID might be incorrect or the bot isn't added.")
         elif "bot token is invalid" in str(e):
              logger.error("The configured TELEGRAM_BOT_TOKEN is invalid.")
-        return False
+        return None
     except Exception as e:
         # Catch other potential exceptions (network issues, etc.)
         logger.exception(f"Unexpected error sending message via Telegram: {e}")
-        return False
+        return None
     finally:
         # Ensure the bot session is closed if necessary (depends on library version and usage)
         # For v20+, Application.run_polling handles this, but here we use Bot directly.
