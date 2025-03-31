@@ -1,24 +1,13 @@
 import logging
 import json
 from openai import AsyncOpenAI, OpenAIError # Use AsyncOpenAI for async operations
-from . import config
+from .config import config_manager
 
 logger = logging.getLogger(__name__)
 
-# --- OpenAI Client Initialization ---
-# Initialize the client, passing api_key and base_url if provided
-try:
-    client = AsyncOpenAI(
-        api_key=config.OPENAI_API_KEY,
-        base_url=config.OPENAI_API_BASE_URL # Pass base_url if set, otherwise it defaults
-    )
-    logger.info(f"OpenAI client initialized. Using model: {config.OPENAI_MODEL}. Base URL: {config.OPENAI_API_BASE_URL or 'Default'}")
-except OpenAIError as e:
-    logger.exception(f"Failed to initialize OpenAI client: {e}")
-    # Depending on the desired behavior, you might want to raise the exception
-    # or handle it gracefully later when the client is used.
-    # For now, we log and let potential errors surface during API calls.
-    client = None # Set client to None if initialization fails
+# --- OpenAI Client Initialization (Removed) ---
+# Client will be initialized dynamically within the function call
+# to ensure latest configuration is used.
 
 # --- Prompt Definition ---
 # Define the prompt directly in the code as requested
@@ -58,8 +47,25 @@ async def translate_and_summarize_article(title: str, body: str) -> dict | None:
         A dictionary with 'translated_title', 'translated_body', and 'hashtags'
         if successful, None otherwise.
     """
-    if not client:
-        logger.error("OpenAI client is not initialized. Cannot perform translation.")
+    # --- Fetch Config and Initialize Client ---
+    api_key = config_manager.get("openai_api_key")
+    base_url = config_manager.get("openai_api_base_url") # Can be None
+    model = config_manager.get("openai_model")
+    temperature = config_manager.get("openai_temperature")
+    max_tokens = config_manager.get("openai_max_tokens")
+
+    if not api_key:
+        logger.error("OpenAI API Key is not configured. Cannot perform translation.")
+        return None
+    if not model:
+         logger.error("OpenAI Model is not configured. Cannot perform translation.")
+         return None
+
+    try:
+        client = AsyncOpenAI(api_key=api_key, base_url=base_url)
+        logger.debug(f"OpenAI client initialized for this request. Model: {model}, Temp: {temperature}, MaxTokens: {max_tokens}, BaseURL: {base_url or 'Default'}")
+    except OpenAIError as e:
+        logger.exception(f"Failed to initialize OpenAI client for request: {e}")
         return None
 
     if not title and not body:
@@ -74,13 +80,13 @@ async def translate_and_summarize_article(title: str, body: str) -> dict | None:
     logger.debug(f"Sending request to OpenAI for title: {title[:50]}...")
     try:
         response = await client.chat.completions.create(
-            model=config.OPENAI_MODEL,
+            model=model,
             messages=[
                 {"role": "system", "content": TRANSLATION_SYSTEM_PROMPT},
                 {"role": "user", "content": user_content}
             ],
-            temperature=config.OPENAI_TEMPERATURE,
-            max_tokens=config.OPENAI_MAX_TOKENS,
+            temperature=temperature,
+            max_tokens=max_tokens,
             # Request JSON response format if supported by the model/API version
             # Note: This might require specific model versions (e.g., gpt-4-1106-preview)
             response_format={"type": "json_object"} # Enforce JSON output mode

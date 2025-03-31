@@ -4,6 +4,8 @@ python-telegram-bot[ext]>=20.0 # Use v20+ for async features
 schedule>=1.0.0
 pytz>=2023.3 # For timezone conversion
 openai>=1.0.0 # For OpenAI API access
+PyYAML>=6.0 # For YAML configuration parsing
+watchdog>=3.0.0 # For monitoring config file changes
 
 # fcntl is part of the standard library on POSIX systems (like Linux)
 # No need to list it here.

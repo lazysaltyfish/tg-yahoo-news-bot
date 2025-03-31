@@ -1,10 +1,11 @@
 import logging
 import sys
-from . import config # Import config to access LOG_LEVEL
+from .config import config_manager
 
 def setup_logging():
     """Configures the root logger."""
-    log_level = getattr(logging, config.LOG_LEVEL, logging.INFO) # Default to INFO if invalid level
+    log_level_str = config_manager.get("log_level", "INFO").upper()
+    log_level = getattr(logging, log_level_str, logging.INFO) # Default to INFO if invalid level
 
     # Define the log format
     log_format = "%(asctime)s - %(levelname)s - %(name)s - %(message)s"
@@ -33,4 +34,4 @@ def setup_logging():
     # logging.getLogger("requests").setLevel(logging.WARNING)
     # logging.getLogger("urllib3").setLevel(logging.WARNING)
 
-    logging.info(f"Logging configured with level: {config.LOG_LEVEL}")
+    logging.info(f"Logging configured with level: {log_level_str}")

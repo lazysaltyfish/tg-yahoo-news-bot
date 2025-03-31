@@ -5,12 +5,13 @@ import asyncio
 import re
 import pytz
 from datetime import datetime
-from app import config, logger_setup, api_client, data_handler, telegram_poster, openai_translator
+from app import logger_setup, api_client, data_handler, telegram_poster, openai_translator
+from app.config import config_manager
 
 # --- Setup ---
 logger_setup.setup_logging()
 logger = logging.getLogger(__name__)
-config.log_config() # Log the loaded configuration
+config_manager.log_loaded_config() # Log the loaded configuration via the manager
 
 # --- Telegram MarkdownV2 Escaping ---
 # Characters to escape: _ * [ ] ( ) ~ ` > # + - = | { } . !
@@ -38,7 +39,8 @@ async def run_check():
         return
 
     # 2. Load already posted articles
-    posted_articles = data_handler.load_posted_articles(config.POSTED_ARTICLES_FILE)
+    posted_articles_file = config_manager.get("posted_articles_file")
+    posted_articles = data_handler.load_posted_articles(posted_articles_file)
     logger.info(f"Loaded {len(posted_articles)} previously posted article URLs.")
 
     # 3. Identify new articles
@@ -99,10 +101,11 @@ async def run_check():
 
         # --- Check for Skip Keywords in Hashtags ---
         should_skip = False
-        if config.SKIP_KEYWORDS:
+        skip_keywords = config_manager.get("skip_keywords", []) # Get current skip keywords
+        if skip_keywords:
             for tag in hashtags:
                 tag_lower = tag.lower() # Case-insensitive check
-                for keyword in config.SKIP_KEYWORDS:
+                for keyword in skip_keywords:
                     if keyword in tag_lower:
                         logger.info(f"Skipping article '{original_title}' ({article_link}) due to keyword '{keyword}' found in hashtag '{tag}'.")
                         should_skip = True
@@ -169,7 +172,7 @@ async def run_check():
         # 8. Update posted articles file (always, regardless of skip status)
         # Note: message_id will be None if skipped or if posting failed
         data_handler.add_posted_article(
-            filepath=config.POSTED_ARTICLES_FILE,
+            filepath=config_manager.get("posted_articles_file"), # Get current path
             url=article_link,
             title=original_title, # Store original title for tracking
             message_id=message_id,
@@ -195,15 +198,32 @@ def run_scheduled_task():
 
 # --- Main Execution ---
 if __name__ == "__main__":
-    logger.info(f"Starting Yahoo News Bot. Checks will run every {config.SCHEDULE_INTERVAL_MINUTES} minutes.")
+    # Get initial schedule interval
+    schedule_interval = config_manager.get("schedule_interval_minutes")
+    logger.info(f"Starting Yahoo News Bot. Initial check interval: {schedule_interval} minutes.")
+    logger.info("Starting configuration file watcher...")
+    config_manager.start_watching() # Start monitoring config.yaml
 
     # Run once immediately at startup
+    logger.info("Running initial check...")
     run_scheduled_task()
 
-    # Schedule the task
-    schedule.every(config.SCHEDULE_INTERVAL_MINUTES).minutes.do(run_scheduled_task)
+    # Schedule the task using the initial interval
+    # Note: Changes to schedule_interval_minutes in config.yaml will require a restart
+    # to affect the schedule, as per the plan.
+    logger.info(f"Scheduling checks every {schedule_interval} minutes.")
+    schedule.every(schedule_interval).minutes.do(run_scheduled_task)
 
     # Keep the script running to allow the scheduler to work
-    while True:
-        schedule.run_pending()
-        time.sleep(60) # Check every minute if jobs are due
+    try:
+        while True:
+            schedule.run_pending()
+            time.sleep(60) # Check every minute if jobs are due
+    except KeyboardInterrupt:
+        logger.info("Shutdown signal received (KeyboardInterrupt).")
+    except Exception as e:
+        logger.exception(f"An unexpected error occurred in the main loop: {e}")
+    finally:
+        logger.info("Stopping configuration file watcher...")
+        config_manager.stop_watching()
+        logger.info("Yahoo News Bot shutting down.")

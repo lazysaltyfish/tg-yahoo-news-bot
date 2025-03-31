@@ -1,0 +1,56 @@
+# Configuration for the Telegram Yahoo News Bot
+# Rename this file to config.yaml and fill in your actual values.
+
+# --- Required Settings ---
+
+# Base URL for the news content API
+api_base_url: "YOUR_API_BASE_URL_HERE"
+
+# Telegram Bot API Token
+telegram_bot_token: "YOUR_TELEGRAM_BOT_TOKEN_HERE"
+
+# Telegram Channel ID (e.g., @your_channel_name or -1001234567890)
+telegram_channel_id: "YOUR_TELEGRAM_CHANNEL_ID_HERE"
+
+# Base URL for the Yahoo News ranking API
+yahoo_ranking_base_url: "YOUR_YAHOO_RANKING_URL_HERE"
+
+# OpenAI API Key
+openai_api_key: "YOUR_OPENAI_API_KEY_HERE"
+
+# OpenAI Model to use (e.g., gpt-3.5-turbo, gpt-4)
+openai_model: "gpt-3.5-turbo"
+
+# --- Optional Settings ---
+
+# Path to the file storing posted article URLs (relative to project root)
+# Default: data/posted_articles.json
+posted_articles_file: "data/posted_articles.json"
+
+# Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+# Default: DEBUG
+log_level: "DEBUG"
+
+# How often to check for new news (in minutes)
+# Default: 10
+schedule_interval_minutes: 10
+
+# OpenAI API Base URL (if using a proxy or alternative endpoint)
+# Default: None (uses OpenAI's default)
+openai_api_base_url: null # Or "YOUR_OPENAI_API_BASE_URL"
+
+# Maximum tokens for OpenAI completion
+# Default: 1000
+openai_max_tokens: 1000
+
+# OpenAI Temperature (sampling creativity, 0.0 to 2.0)
+# Default: 0.7
+openai_temperature: 0.7
+
+# List of keywords (case-insensitive). If any keyword is found within a generated hashtag,
+# the article will not be posted to Telegram. Leave empty or comment out to disable.
+# Example: ["politics", "breaking"]
+# Default: [] (empty list)
+skip_keywords:
+  #- keyword1
+  #- keyword2

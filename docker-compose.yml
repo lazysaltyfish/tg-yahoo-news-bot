@@ -9,14 +9,15 @@ services:
     container_name: yahoo-news-telegram-bot
     # Load environment variables from a .env file in the same directory
     # This is generally safer for secrets than listing them directly here.
-    env_file:
-      - .env
     volumes:
       # Mount a local directory named 'data' into '/data' inside the container.
       # The POSTED_ARTICLES_FILE environment variable defaults to '/data/posted_articles.json'.
       # This ensures the JSON file persists across container restarts.
       # Create the './data' directory locally if it doesn't exist before running 'docker-compose up'.
       - ./data:/data
+      # Mount the configuration file (read-only)
+      # Ensure config.yaml exists in the project root before running 'docker-compose up'.
+      - ./config.yaml:/opt/app/config.yaml:ro
       # Optional: Mount logs if logging to a file within the container
       # - ./logs:/opt/app/logs
     # Restart policy: Restart the container unless it was explicitly stopped.

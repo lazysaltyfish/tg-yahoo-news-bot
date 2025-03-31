@@ -4,40 +4,30 @@
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 cd "$SCRIPT_DIR" || exit 1 # Change to the script's directory
 
-ENV_FILE=".env"
-EXAMPLE_ENV_FILE=".env.example"
+CONFIG_FILE="config.yaml"
+EXAMPLE_CONFIG_FILE="config.yaml.example"
 
 # Check if .env file exists
-if [ ! -f "$ENV_FILE" ]; then
-    echo "'.env' file not found."
-    if [ -f "$EXAMPLE_ENV_FILE" ]; then
-        echo "Copying '.env.example' to '.env'..."
-        if cp "$EXAMPLE_ENV_FILE" "$ENV_FILE"; then
+if [ ! -f "$CONFIG_FILE" ]; then
+    echo "'$CONFIG_FILE' file not found."
+    if [ -f "$EXAMPLE_CONFIG_FILE" ]; then
+        echo "Copying '$EXAMPLE_CONFIG_FILE' to '$CONFIG_FILE'..."
+        if cp "$EXAMPLE_CONFIG_FILE" "$CONFIG_FILE"; then
             echo ""
-            echo "IMPORTANT: Please edit the '.env' file with your actual API keys, tokens, and URLs."
-            echo "Then, run this script again (you might need to run 'chmod +x start.sh' first)."
+            echo "IMPORTANT: Please edit the '$CONFIG_FILE' file with your actual API keys, tokens, and URLs."
+            echo "Then, run this script again."
         else
-            echo "ERROR: Failed to copy '.env.example'." >&2
+            echo "ERROR: Failed to copy '$EXAMPLE_CONFIG_FILE'." >&2
             exit 1
         fi
     else
-        echo "ERROR: '.env.example' not found either. Cannot create '.env'. Please create it manually." >&2
+        echo "ERROR: '$EXAMPLE_CONFIG_FILE' not found either. Cannot create '$CONFIG_FILE'. Please create it manually." >&2
     fi
     exit 1
 fi
 
-# Load environment variables from .env file
-echo "Loading environment variables from '.env'..."
-# Use 'set -a' to export all variables defined subsequently
-# Use 'source' to execute the .env file in the current shell context
-# Filter out comments and empty lines before sourcing
-set -a
-if [ -f "$ENV_FILE" ]; then
-    # Use grep to filter out comments and empty lines before sourcing
-    # This prevents errors if the .env file contains invalid shell commands
-    source <(grep -vE '^\s*#|^\s*$' "$ENV_FILE")
-fi
-set +a # Stop exporting automatically
+# Environment variables are no longer loaded from a file by this script.
+# The Python application now reads configuration from config.yaml.
 
 echo ""
 echo "Starting the bot (app/main.py)..."

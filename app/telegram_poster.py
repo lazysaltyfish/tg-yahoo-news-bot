@@ -3,7 +3,7 @@ import asyncio
 from telegram import Bot
 from telegram.constants import ParseMode
 from telegram.error import TelegramError, BadRequest # Import BadRequest specifically
-from . import config
+from .config import config_manager
 
 logger = logging.getLogger(__name__)
 
@@ -22,40 +22,43 @@ async def post_message(message: str):
     Returns:
         The message_id of the sent message if successful, None otherwise.
     """
-    if not config.TELEGRAM_BOT_TOKEN or not config.TELEGRAM_CHANNEL_ID:
+    bot_token = config_manager.get("telegram_bot_token")
+    channel_id = config_manager.get("telegram_channel_id")
+
+    if not bot_token or not channel_id:
         logger.error("Telegram Bot Token or Channel ID is not configured. Cannot send message.")
-        return False
+        return None # Return None for consistency with other error returns
 
     if not message:
         logger.warning("Attempted to send an empty message to Telegram.")
-        return False
+        return None # Return None for consistency
 
-    bot = Bot(token=config.TELEGRAM_BOT_TOKEN)
-    logger.info(f"Attempting to send message to Telegram channel {config.TELEGRAM_CHANNEL_ID}...")
+    bot = Bot(token=bot_token)
+    logger.info(f"Attempting to send message to Telegram channel {channel_id}...")
 
     try:
         # Note: Sending messages requires an async context if using python-telegram-bot v20+
         # The main loop will need to handle the async execution.
         # Store the returned Message object
         sent_message = await bot.send_message(
-            chat_id=config.TELEGRAM_CHANNEL_ID,
+            chat_id=channel_id,
             text=message,
             parse_mode=ParseMode.MARKDOWN_V2 # Use MarkdownV2 for formatting
             # Consider adding disable_web_page_preview=True if desired
         )
-        logger.info(f"Successfully sent message (ID: {sent_message.message_id}) to Telegram channel {config.TELEGRAM_CHANNEL_ID}.")
+        logger.info(f"Successfully sent message (ID: {sent_message.message_id}) to Telegram channel {channel_id}.")
         # Return the message_id
         return sent_message.message_id
     except BadRequest as e: # Catch BadRequest specifically
         # Log the specific error and the message content
-        log_message = f"Telegram BadRequest sending message to {config.TELEGRAM_CHANNEL_ID}: {e}"
+        log_message = f"Telegram BadRequest sending message to {channel_id}: {e}"
         log_message += f"\nProblematic message content:\n---\n{message}\n---"
         logger.error(log_message) # Log as error, traceback might not be needed for parsing errors
         # Consider if other specific handling is needed for BadRequest
         return None # Return None on BadRequest
     except TelegramError as e:
         # Catch other Telegram API errors (e.g., invalid token, chat not found, bot blocked)
-        logger.exception(f"Telegram API error sending message to {config.TELEGRAM_CHANNEL_ID}: {e}")
+        logger.exception(f"Telegram API error sending message to {channel_id}: {e}")
         # You might want more specific error handling here based on e.message or e.code
         if "chat not found" in str(e):
             logger.error("The configured TELEGRAM_CHANNEL_ID might be incorrect or the bot isn't added.")

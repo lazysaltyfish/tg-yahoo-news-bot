@@ -1,7 +1,7 @@
 import logging
 import requests
 from urllib.parse import urljoin, urlencode
-from . import config
+from .config import config_manager
 
 logger = logging.getLogger(__name__)
 
@@ -13,7 +13,7 @@ session = requests.Session()
 def _make_request(method: str, endpoint: str, params: dict = None, json_data: dict = None) -> dict | None:
     """Helper function to make API requests and handle common errors."""
     # Construct URL manually to avoid urljoin issues with base path
-    base_url = config.API_BASE_URL
+    base_url = config_manager.get("api_base_url")
     if not base_url: # Check if base_url is None or empty
         logger.error("API_BASE_URL is not configured.")
         return None
@@ -61,9 +61,13 @@ def get_ranking() -> list | None:
         A list of article dictionaries (e.g., [{'url': '...', 'title': '...'}, ...])
         or None if an error occurs.
     """
-    logger.info(f"Fetching Yahoo News ranking using base URL: {config.YAHOO_RANKING_BASE_URL}...")
+    yahoo_ranking_url = config_manager.get("yahoo_ranking_base_url")
+    if not yahoo_ranking_url:
+        logger.error("YAHOO_RANKING_BASE_URL is not configured.")
+        return None
+    logger.info(f"Fetching Yahoo News ranking using base URL: {yahoo_ranking_url}...")
     endpoint = "/yahoo/ranking"
-    params = {'url': config.YAHOO_RANKING_BASE_URL} # Add ranking base url as parameter
+    params = {'url': yahoo_ranking_url} # Add ranking base url as parameter
     response_data = _make_request("GET", endpoint, params=params)
 
     if response_data is None:
