@@ -14,7 +14,7 @@ def load_posted_articles(filepath: str) -> dict:
 
     Returns:
         A dictionary mapping posted article URLs to a sub-dictionary
-        containing 'title' and 'tg_channel_msg_id'.
+        containing 'title', 'tg_channel_msg_id', and potentially 'skipped'.
         Returns an empty dictionary if the file doesn't exist or is invalid.
     """
     if not os.path.exists(filepath):
@@ -46,16 +46,17 @@ def load_posted_articles(filepath: str) -> dict:
         return {}
 
 
-def add_posted_article(filepath: str, url: str, title: str, message_id: int):
+def add_posted_article(filepath: str, url: str, title: str, message_id: int | None, skipped: bool):
     """
-    Adds a new article URL and title to the JSON file.
+    Adds a new article URL, title, message ID, and skipped status to the JSON file.
     Uses file locking to prevent race conditions during write.
 
     Args:
         filepath: The path to the JSON file.
         url: The URL of the article to add.
         title: The title of the article to add.
-        message_id: The Telegram message ID associated with this article.
+        message_id: The Telegram message ID, or None if the post was skipped.
+        skipped: Boolean indicating if the article posting was skipped due to keywords.
     """
     try:
         # Ensure the directory exists
@@ -95,10 +96,13 @@ def add_posted_article(filepath: str, url: str, title: str, message_id: int):
                 if url not in current_data:
                     current_data[url] = {
                         "title": title,
-                        "tg_channel_msg_id": message_id
+                        "tg_channel_msg_id": message_id, # Can be None if skipped
+                        "skipped": skipped
                     }
-                    logger.info(f"Adding article to {filepath}: {url} (Msg ID: {message_id})")
+                    log_msg_id = f"(Msg ID: {message_id})" if message_id else "(Skipped)"
+                    logger.info(f"Adding article to {filepath}: {url} {log_msg_id}")
                 else:
+                    # Optionally update skipped status if already exists? For now, just log.
                     logger.debug(f"Article already exists in {filepath}, not adding again: {url}")
                     return # No need to write if already present
 

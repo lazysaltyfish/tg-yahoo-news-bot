@@ -42,6 +42,14 @@ except ValueError:
     logging.warning(f"Invalid OPENAI_TEMPERATURE value. Using default: {DEFAULT_OPENAI_TEMPERATURE}.")
     OPENAI_TEMPERATURE = DEFAULT_OPENAI_TEMPERATURE
 
+# Optional: Comma-separated list of keywords in hashtags that trigger skipping Telegram post
+SKIP_KEYWORDS_RAW = os.environ.get("SKIP_KEYWORDS", "")
+SKIP_KEYWORDS = [
+    keyword.strip().lower()
+    for keyword in SKIP_KEYWORDS_RAW.split(',')
+    if keyword.strip() # Ensure we don't have empty strings from extra commas
+]
+
 # --- Validation ---
 
 REQUIRED_VARS = {
@@ -78,4 +86,5 @@ def log_config():
     logging.info(f"OPENAI_API_BASE_URL: {OPENAI_API_BASE_URL if OPENAI_API_BASE_URL else 'Default'}")
     logging.info(f"OPENAI_MAX_TOKENS: {OPENAI_MAX_TOKENS}")
     logging.info(f"OPENAI_TEMPERATURE: {OPENAI_TEMPERATURE}")
+    logging.info(f"SKIP_KEYWORDS: {SKIP_KEYWORDS if SKIP_KEYWORDS else 'None'}")
     logging.info("---------------------")

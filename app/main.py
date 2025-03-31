@@ -97,79 +97,88 @@ async def run_check():
              logger.error(f"OpenAI did not return a translated title for {article_link}. Skipping article.")
              continue
 
-        # 6. Format Message
-        # Escape necessary components for MarkdownV2
-        escaped_title = escape_markdown_v2(translated_title)
-        escaped_link = escape_markdown_v2(article_link)
-        escaped_content = escape_markdown_v2(translated_body)
+        # --- Check for Skip Keywords in Hashtags ---
+        should_skip = False
+        if config.SKIP_KEYWORDS:
+            for tag in hashtags:
+                tag_lower = tag.lower() # Case-insensitive check
+                for keyword in config.SKIP_KEYWORDS:
+                    if keyword in tag_lower:
+                        logger.info(f"Skipping article '{original_title}' ({article_link}) due to keyword '{keyword}' found in hashtag '{tag}'.")
+                        should_skip = True
+                        break # Stop checking keywords for this tag
+                if should_skip:
+                    break # Stop checking tags for this article
 
-        # --- Format Publication Time ---
-        formatted_time_str = ""
-        publication_time_iso = content_data.get('publication_time', '') if content_data else ''
-        if publication_time_iso:
-            try:
-                # Parse the ISO 8601 string (assuming 'Z' means UTC)
-                # Python < 3.11 doesn't handle 'Z' directly in fromisoformat, replace it
-                if publication_time_iso.endswith('Z'):
-                     publication_time_iso = publication_time_iso[:-1] + '+00:00'
-                utc_time = datetime.fromisoformat(publication_time_iso)
-                # Ensure it's timezone-aware (UTC)
-                if utc_time.tzinfo is None:
-                    utc_time = utc_time.replace(tzinfo=pytz.utc)
+        # 6. Format Message (only if not skipping)
+        message = ""
+        if not should_skip:
+            # Escape necessary components for MarkdownV2
+            escaped_title = escape_markdown_v2(translated_title)
+            # Link in [text](link) doesn't need escaping usually, but other parts do
+            # escaped_link = escape_markdown_v2(article_link) # Reverted based on user feedback
+            escaped_content = escape_markdown_v2(translated_body)
 
-                # Convert to JST (Asia/Tokyo)
-                jst = pytz.timezone('Asia/Tokyo')
-                jst_time = utc_time.astimezone(jst)
+            # --- Format Publication Time ---
+            formatted_time_str = ""
+            publication_time_iso = content_data.get('publication_time', '') if content_data else ''
+            if publication_time_iso:
+                try:
+                    if publication_time_iso.endswith('Z'):
+                         publication_time_iso = publication_time_iso[:-1] + '+00:00'
+                    utc_time = datetime.fromisoformat(publication_time_iso)
+                    if utc_time.tzinfo is None:
+                        utc_time = utc_time.replace(tzinfo=pytz.utc)
+                    jst = pytz.timezone('Asia/Tokyo')
+                    jst_time = utc_time.astimezone(jst)
+                    formatted_time_str = jst_time.strftime('%Y-%m-%d %H:%M')
+                except ValueError:
+                    logger.warning(f"Could not parse publication time: {publication_time_iso}")
+                except Exception as time_e:
+                     logger.error(f"Error formatting time '{publication_time_iso}': {time_e}")
 
-                # Format as YYYY-MM-DD HH:MM
-                formatted_time_str = jst_time.strftime('%Y-%m-%d %H:%M')
-            except ValueError:
-                logger.warning(f"Could not parse publication time: {publication_time_iso}")
-            except Exception as time_e:
-                 logger.error(f"Error formatting time '{publication_time_iso}': {time_e}")
+            escaped_time = escape_markdown_v2(formatted_time_str)
 
-        escaped_time = escape_markdown_v2(formatted_time_str) # Escape the formatted JST time
+            # Construct the message (adjust formatting as desired)
+            message = f"*{escaped_title}*\n\n"
+            if escaped_content:
+                 message += f"{escaped_content}\n\n"
+            message += f"[原文链接]({article_link})"
+            if escaped_time:
+                 message += f"\n_{escaped_time}_"
 
-        # Construct the message (adjust formatting as desired)
-        message = f"*{escaped_title}*\n\n"
-        if escaped_content:
-             # Add translated content summary if available
-             message += f"{escaped_content}\n\n" # Add ellipsis
-        # Use the raw article_link for the Markdown link syntax
-        message += f"[原文链接]({article_link})"
-        if escaped_time:
-             message += f"\n_{escaped_time}_" # Add escaped time on new line, italicized
+            # Add hashtags (escaped)
+            if hashtags:
+                valid_hashtags = [f"#{tag.lstrip('#')}" for tag in hashtags if isinstance(tag, str) and tag]
+                if valid_hashtags:
+                    escaped_hashtags = [escape_markdown_v2(tag) for tag in valid_hashtags]
+                    message += "\n\n" + " ".join(escaped_hashtags)
 
-        # Add hashtags
-        if hashtags:
-            # Ensure hashtags start with # and are valid strings
-            valid_hashtags = [f"#{tag.lstrip('#')}" for tag in hashtags if isinstance(tag, str) and tag]
-            if valid_hashtags:
-                # Escape the hashtags for MarkdownV2, including the '#'
-                escaped_hashtags = [escape_markdown_v2(tag) for tag in valid_hashtags]
-                message += "\n\n" + " ".join(escaped_hashtags) # Add hashtags on a new line, separated by spaces
+        # 7. Post to Telegram (conditionally)
+        message_id = None # Initialize message_id
+        if not should_skip:
+            if message: # Ensure message is not empty before posting
+                logger.debug(f"Formatted message for {article_link}:\n{message}")
+                message_id = await telegram_poster.post_message(message)
+                if message_id is None:
+                    logger.error(f"Failed to post article to Telegram (received None message_id): {article_link}")
+            else:
+                 logger.error(f"Message formatting resulted in empty message for {article_link}. Cannot post.")
+        # If should_skip is True, message_id remains None
 
-        # 7. Post to Telegram
-        logger.debug(f"Formatted message for {article_link}:\n{message}")
-        # Returns message_id on success, None on failure
-        message_id = await telegram_poster.post_message(message)
+        # 8. Update posted articles file (always, regardless of skip status)
+        # Note: message_id will be None if skipped or if posting failed
+        data_handler.add_posted_article(
+            filepath=config.POSTED_ARTICLES_FILE,
+            url=article_link,
+            title=original_title, # Store original title for tracking
+            message_id=message_id,
+            skipped=should_skip # Pass the skip status
+        )
+        if not should_skip and message_id is not None:
+             processed_count += 1 # Increment only if successfully posted
 
-        # 8. Update posted articles file if successful (message_id is not None)
-        if message_id is not None:
-            logger.info(f"Successfully posted article to Telegram (Msg ID: {message_id}): {article_link}")
-            # Pass the message_id to the data handler
-            data_handler.add_posted_article(
-                filepath=config.POSTED_ARTICLES_FILE,
-                url=article_link,
-                title=original_title, # Still store original title for reference? Or translated? Let's stick to original for now.
-                message_id=message_id
-            )
-            processed_count += 1
-        else:
-            logger.error(f"Failed to post article to Telegram: {article_link}")
-            # Consider retry logic here? For now, we just log and move on.
-
-        # A small delay between posts to avoid rate limiting
+        # A small delay between processing articles
         await asyncio.sleep(5) # Sleep for 5 seconds
 
     logger.info(f"Finished news check run. Processed {processed_count} new articles.")
