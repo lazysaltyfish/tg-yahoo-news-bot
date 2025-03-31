@@ -29,8 +29,8 @@ and generating relevant hashtags.
 Input will be a Japanese title and body.
 Output MUST be a single JSON object containing the following keys:
 - "translated_title": The Chinese translation of the original title.
-- "translated_body": The Chinese translation of the original body. Keep the translation concise but informative.
-- "hashtags": A JSON array of 3-5 relevant Chinese hashtags (strings starting with '#').
+- "translated_body": The Chinese translation of the original body. Keep the translation concise but informative. 请使用合理的段落格式（可以考虑和原文段落一致）,注意分段的时候使用两个换行符,使得生成的文本有更好的人类可读性,而不是完全一整段很长的文本.
+- "hashtags": A JSON array of 2-6 relevant Chinese hashtags (strings starting with '#').
 
 Example Input:
 ###Title###: 速報：東京で大地震発生、被害状況確認中
