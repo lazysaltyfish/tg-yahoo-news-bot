@@ -43,7 +43,7 @@ Example Output JSON:
   "hashtags": ["#东京地震", "#日本新闻", "#自然灾害", "#紧急速报"]
 }
 
-Ensure the output is ONLY the JSON object and nothing else.
+Ensure the output is ONLY the JSON object and nothing else. Note that the markdown style json is NOT allowed.
 """
 
 async def translate_and_summarize_article(title: str, body: str) -> dict | None:
@@ -83,7 +83,7 @@ async def translate_and_summarize_article(title: str, body: str) -> dict | None:
             max_tokens=config.OPENAI_MAX_TOKENS,
             # Request JSON response format if supported by the model/API version
             # Note: This might require specific model versions (e.g., gpt-4-1106-preview)
-            # response_format={"type": "json_object"} # Uncomment if applicable
+            response_format={"type": "json_object"} # Enforce JSON output mode
         )
 
         # Extract the response content
