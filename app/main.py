@@ -135,9 +135,19 @@ async def run_check():
         if escaped_content:
              # Add translated content summary if available
              message += f"{escaped_content}\n\n" # Add ellipsis
-        message += f"[原文链接]({escaped_link})" # Link to original article using escaped_link
+        # Use the raw article_link for the Markdown link syntax
+        message += f"[原文链接]({article_link})"
         if escaped_time:
              message += f"\n_{escaped_time}_" # Add escaped time on new line, italicized
+
+        # Add hashtags
+        if hashtags:
+            # Ensure hashtags start with # and are valid strings
+            valid_hashtags = [f"#{tag.lstrip('#')}" for tag in hashtags if isinstance(tag, str) and tag]
+            if valid_hashtags:
+                # Escape the hashtags for MarkdownV2, including the '#'
+                escaped_hashtags = [escape_markdown_v2(tag) for tag in valid_hashtags]
+                message += "\n\n" + " ".join(escaped_hashtags) # Add hashtags on a new line, separated by spaces
 
         # 7. Post to Telegram
         logger.debug(f"Formatted message for {article_link}:\n{message}")
