@@ -105,11 +105,17 @@ async def translate_and_summarize_article(title: str, body: str) -> dict | None:
         # Parse the JSON response
         try:
             # The response might contain markdown ```json ... ```, try to extract JSON part
-            if response_content.strip().startswith("```json"):
-                json_str = response_content.strip()[7:-3].strip() # Remove ```json and ```
-            elif response_content.strip().startswith("{"):
-                 json_str = response_content.strip()
-            else:
+            json_str = response_content.strip()
+            if json_str.startswith("```json"):
+                # Find the first '{' and the last '}' to extract the JSON object
+                start_index = json_str.find('{')
+                end_index = json_str.rfind('}')
+                if start_index != -1 and end_index != -1 and start_index < end_index:
+                    json_str = json_str[start_index:end_index+1]
+                else:
+                    logger.error(f"Could not extract JSON object from markdown block: {response_content[:200]}...")
+                    return None
+            elif not json_str.startswith("{"):
                  logger.error(f"OpenAI response does not appear to be JSON: {response_content[:200]}...")
                  return None
 
