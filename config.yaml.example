@@ -12,8 +12,11 @@ telegram_bot_token: "YOUR_TELEGRAM_BOT_TOKEN_HERE"
 # Telegram Channel ID (e.g., @your_channel_name or -1001234567890)
 telegram_channel_id: "YOUR_TELEGRAM_CHANNEL_ID_HERE"
 
-# Base URL for the Yahoo News ranking API
-yahoo_ranking_base_url: "YOUR_YAHOO_RANKING_URL_HERE"
+# List of Base URLs for the Yahoo News ranking APIs
+# Provide one or more URLs.
+yahoo_ranking_base_urls:
+  - "YOUR_YAHOO_RANKING_URL_1_HERE"
+  - "YOUR_YAHOO_RANKING_URL_2_HERE" # Add more URLs as needed
 
 # OpenAI API Key
 openai_api_key: "YOUR_OPENAI_API_KEY_HERE"

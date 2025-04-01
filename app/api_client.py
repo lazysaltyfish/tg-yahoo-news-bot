@@ -53,56 +53,68 @@ def _make_request(method: str, endpoint: str, params: dict = None, json_data: di
         return None
 
 
-def get_ranking() -> list | None:
+def get_ranking() -> list:
     """
-    Fetches the current Yahoo News ranking.
+    Fetches Yahoo News ranking from multiple configured URLs, combines, and deduplicates.
 
     Returns:
-        A list of article dictionaries (e.g., [{'url': '...', 'title': '...'}, ...])
-        or None if an error occurs.
+        A list of unique article dictionaries (e.g., [{'link': '...', 'title': '...'}, ...]).
+        Returns an empty list if no URLs are configured or no valid articles are found.
     """
-    yahoo_ranking_url = config_manager.get("yahoo_ranking_base_url")
-    if not yahoo_ranking_url:
-        logger.error("YAHOO_RANKING_BASE_URL is not configured.")
-        return None
-    logger.info(f"Fetching Yahoo News ranking using base URL: {yahoo_ranking_url}...")
-    endpoint = "/yahoo/ranking"
-    params = {'url': yahoo_ranking_url} # Add ranking base url as parameter
-    response_data = _make_request("GET", endpoint, params=params)
-
-    if response_data is None:
-        logger.error("Failed to fetch ranking data or received None.")
-        return None
-
-    # --- New Validation based on provided structure ---
-    if not isinstance(response_data, dict):
-        logger.error(f"Unexpected data type received from {endpoint}. Expected dict, got {type(response_data)}.")
-        return None
-
-    if response_data.get("status") != "success":
-        logger.error(f"API request to {endpoint} was not successful. Status: {response_data.get('status')}. Message: {response_data.get('message', 'N/A')}")
-        return None
-
-    articles_list = response_data.get("data")
-    if not isinstance(articles_list, list):
-        logger.error(f"Expected 'data' field in response to be a list, but got {type(articles_list)}.")
-        return None
-
-    # Validate items within the list (checking for 'link' and 'title')
-    valid_articles = []
-    for item in articles_list:
-        if isinstance(item, dict) and 'link' in item and 'title' in item:
-            valid_articles.append(item)
-        else:
-            logger.warning(f"Skipping invalid article item in ranking response: {item}")
-
-    if not valid_articles:
-        logger.info("No valid articles found in the 'data' list of the ranking response.")
-        # Return empty list instead of None if the API call was successful but data was empty/invalid
+    ranking_urls = config_manager.get("yahoo_ranking_base_urls", [])
+    if not ranking_urls:
+        logger.warning("YAHOO_RANKING_BASE_URLS is not configured or is empty. Cannot fetch rankings.")
         return []
 
-    logger.info(f"Successfully fetched and parsed {len(valid_articles)} articles from ranking.")
-    return valid_articles
+    logger.info(f"Fetching Yahoo News rankings from {len(ranking_urls)} URLs...")
+    endpoint = "/yahoo/ranking"
+    all_articles = []
+    seen_article_links = set()
+
+    for i, ranking_url in enumerate(ranking_urls):
+        logger.info(f"Fetching ranking from URL {i+1}/{len(ranking_urls)}: {ranking_url}")
+        params = {'url': ranking_url} # Pass the specific ranking URL to the API
+        response_data = _make_request("GET", endpoint, params=params)
+
+        if response_data is None:
+            logger.error(f"Failed to fetch ranking data or received None for URL: {ranking_url}")
+            continue # Skip to the next URL
+
+        # --- Validation for the response from this specific URL ---
+        if not isinstance(response_data, dict):
+            logger.error(f"Unexpected data type received from {endpoint} for URL {ranking_url}. Expected dict, got {type(response_data)}.")
+            continue
+
+        if response_data.get("status") != "success":
+            logger.error(f"API request to {endpoint} for URL {ranking_url} was not successful. Status: {response_data.get('status')}. Message: {response_data.get('message', 'N/A')}")
+            continue
+
+        articles_list = response_data.get("data")
+        if not isinstance(articles_list, list):
+            logger.error(f"Expected 'data' field in response for URL {ranking_url} to be a list, but got {type(articles_list)}.")
+            continue
+
+        # Validate items within the list and deduplicate
+        articles_found_this_url = 0
+        for item in articles_list:
+            if isinstance(item, dict) and 'link' in item and 'title' in item:
+                article_link = item.get('link')
+                if article_link and article_link not in seen_article_links:
+                    seen_article_links.add(article_link)
+                    all_articles.append(item)
+                    articles_found_this_url += 1
+                # else: logger.debug(f"Duplicate article skipped: {article_link}") # Optional: log duplicates
+            else:
+                logger.warning(f"Skipping invalid article item in ranking response from {ranking_url}: {item}")
+        logger.info(f"Found {articles_found_this_url} new, valid articles from URL: {ranking_url}")
+
+
+    if not all_articles:
+        logger.info("No valid, unique articles found across all configured ranking URLs.")
+        return [] # Return empty list
+
+    logger.info(f"Successfully fetched and combined {len(all_articles)} unique articles from {len(ranking_urls)} ranking URLs.")
+    return all_articles
 
 
 def get_article_content(article_url: str) -> dict | None:

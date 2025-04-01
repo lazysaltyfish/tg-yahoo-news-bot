@@ -18,7 +18,7 @@ DEFAULT_CONFIG = {
     "api_base_url": None,
     "telegram_bot_token": None,
     "telegram_channel_id": None,
-    "yahoo_ranking_base_url": None,
+    "yahoo_ranking_base_urls": [], # Default to empty list
     "openai_api_key": None,
     "openai_model": None,
 }
@@ -30,7 +30,7 @@ REQUIRED_KEYS = [
     "api_base_url",
     "telegram_bot_token",
     "telegram_channel_id",
-    "yahoo_ranking_base_url",
+    "yahoo_ranking_base_urls",
     "openai_api_key",
     "openai_model",
 ]

@@ -38,8 +38,7 @@ class ConfigManager:
                 else:
                     logger.warning(f"Configuration file is empty or invalid: {self.config_path}. Using defaults.")
 
-            # Type conversions and specific defaults handling (similar to original config.py)
-            # Example: Ensure numeric types are correct
+            # Type conversions and specific defaults handling
             try:
                 new_config['schedule_interval_minutes'] = int(new_config.get('schedule_interval_minutes', self.defaults.get('schedule_interval_minutes')))
             except (ValueError, TypeError):
@@ -68,15 +67,49 @@ class ConfigManager:
             else:
                  new_config['skip_keywords'] = [] # Default if not present
 
+            # Handle list type for yahoo_ranking_base_urls
+            ranking_urls = new_config.get('yahoo_ranking_base_urls')
+            if isinstance(ranking_urls, list):
+                 valid_urls = []
+                 for url in ranking_urls:
+                     if url and isinstance(url, str) and url.strip():
+                         valid_urls.append(str(url).strip())
+                     else:
+                         logger.warning(f"Invalid or empty URL found in yahoo_ranking_base_urls: '{url}'. Skipping.")
+                 new_config['yahoo_ranking_base_urls'] = valid_urls
+            elif ranking_urls is not None: # If it exists but isn't a list
+                 logger.warning(f"Invalid format for yahoo_ranking_base_urls (expected a list). Ignoring. Value: {ranking_urls}")
+                 new_config['yahoo_ranking_base_urls'] = [] # Default to empty list (validation below will catch if required)
+            else:
+                 new_config['yahoo_ranking_base_urls'] = [] # Default if not present (validation below will catch if required)
+
 
             # Validation
             missing_keys = self.required_keys - set(new_config.keys())
-            # Also check if required keys have None or empty string values (adjust as needed)
-            empty_required_keys = {k for k in self.required_keys if new_config.get(k) is None or new_config.get(k) == ""}
+            # Also check if required keys have None or empty values.
+            # For 'yahoo_ranking_base_urls', ensure it's a non-empty list.
+            empty_required_keys = set()
+            for k in self.required_keys:
+                value = new_config.get(k)
+                is_empty = False
+                if k == 'yahoo_ranking_base_urls':
+                    # Check if it's None, not a list, or an empty list
+                    if value is None or not isinstance(value, list) or not value:
+                        is_empty = True
+                        if value is not None and not isinstance(value, list):
+                             logger.error(f"Config key 'yahoo_ranking_base_urls' is required but is not a list: {value}. Treating as empty/invalid.")
+                        elif isinstance(value, list) and not value:
+                             logger.error("Config key 'yahoo_ranking_base_urls' is required but the list is empty.")
+                        # Implicitly handles value is None case
+                elif value is None or value == "": # Check for None or empty string for other keys
+                    is_empty = True
+
+                if is_empty:
+                    empty_required_keys.add(k)
 
             if missing_keys or empty_required_keys:
                  all_missing = missing_keys.union(empty_required_keys)
-                 logger.error(f"Missing or empty required configuration keys: {', '.join(all_missing)}")
+                 logger.error(f"Missing or empty required configuration keys: {', '.join(sorted(list(all_missing)))}")
                  # Decide on behavior: raise error or just log? Let's log and continue with potentially broken state for now.
                  # raise ValueError(f"Missing or empty required configuration keys: {', '.join(all_missing)}")
 
@@ -192,6 +225,17 @@ class ConfigManager:
         for key, value in sorted(log_config.items()):
             if key in sensitive_keys:
                 log_output += f"\n{key}: {'Set' if value else 'Not Set'}"
+            elif key == 'yahoo_ranking_base_urls':
+                 # Log the list nicely
+                 if isinstance(value, list):
+                     if value:
+                         log_output += f"\n{key}:"
+                         for i, url in enumerate(value):
+                             log_output += f"\n  - [{i+1}] {url}"
+                     else:
+                         log_output += f"\n{key}: [] (Empty List)"
+                 else:
+                     log_output += f"\n{key}: {value} (INVALID TYPE - Expected List)" # Log if not a list
             else:
                 log_output += f"\n{key}: {value}"
         log_output += "\n---------------------------"
