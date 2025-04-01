@@ -81,11 +81,12 @@ async def run_check():
             # Let's try translating title only if body is missing.
 
         # 5. Translate Title, Body and Generate Hashtags using OpenAI
-        logger.info(f"Requesting translation and hashtags from OpenAI for: {article_link}")
+        logger.info(f"--> Calling OpenAI translator for: {article_link}") # Log before call
         translation_result = await openai_translator.translate_and_summarize_article(
             title=original_title,
             body=original_body # Pass empty string if body wasn't found
         )
+        logger.info(f"<-- Returned from OpenAI translator for: {article_link}. Result: {'Success' if translation_result else 'Failure'}") # Log after call
 
         if not translation_result:
             logger.error(f"Failed to get translation/hashtags from OpenAI for {article_link}. Skipping article.")
@@ -184,7 +185,7 @@ async def run_check():
         # A small delay between processing articles
         await asyncio.sleep(5) # Sleep for 5 seconds
 
-    logger.info(f"Finished news check run. Processed {processed_count} new articles.")
+    logger.info(f"--- run_check function finished. Processed {processed_count} new articles. ---") # Log end of function
 
 
 # --- Scheduler Integration ---
