@@ -77,8 +77,7 @@ async def run_check():
                 logger.warning(f"Article body is empty or not a string for {article_link}.")
         else:
             logger.warning(f"Could not get body content for {article_link}.")
-            # Continue even without body, maybe title translation is enough? Or skip?
-            # Let's try translating title only if body is missing.
+            continue # Skip this article if body is not found
 
         # 5. Translate Title, Body and Generate Hashtags using OpenAI
         logger.info(f"--> Calling OpenAI translator for: {article_link}") # Log before call
