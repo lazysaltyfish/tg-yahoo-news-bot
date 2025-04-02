@@ -71,27 +71,44 @@ def get_ranking() -> list:
     all_articles = []
     seen_article_links = set()
 
-    for i, ranking_url in enumerate(ranking_urls):
-        logger.info(f"Fetching ranking from URL {i+1}/{len(ranking_urls)}: {ranking_url}")
-        params = {'url': ranking_url} # Pass the specific ranking URL to the API
+    YAHOO_JP_PREFIX = "https://news.yahoo.co.jp/"
+    override_base = config_manager.get("yahoo_article_url_override_base") # Get override base once
+
+    for i, original_ranking_url in enumerate(ranking_urls):
+        target_ranking_url = original_ranking_url # URL to be potentially modified
+
+        # Check for URL override
+        if override_base and isinstance(override_base, str) and target_ranking_url.startswith(YAHOO_JP_PREFIX):
+            # Ensure override_base ends with '/' if it doesn't already
+            if not override_base.endswith('/'):
+                override_base += '/'
+            # Replace the prefix
+            original_path = target_ranking_url[len(YAHOO_JP_PREFIX):]
+            target_ranking_url = urljoin(override_base, original_path) # Use urljoin for safety
+            logger.info(f"Replacing Yahoo JP prefix for ranking URL {i+1}. Original: {original_ranking_url}, New: {target_ranking_url}")
+        else:
+             logger.debug(f"No URL override applied for ranking URL: {original_ranking_url}")
+
+        logger.info(f"Fetching ranking from URL {i+1}/{len(ranking_urls)}: {target_ranking_url} (Original: {original_ranking_url})")
+        params = {'url': target_ranking_url} # Pass the potentially modified ranking URL to the API
         response_data = _make_request("GET", endpoint, params=params)
 
         if response_data is None:
-            logger.error(f"Failed to fetch ranking data or received None for URL: {ranking_url}")
+            logger.error(f"Failed to fetch ranking data or received None for URL: {target_ranking_url} (Original: {original_ranking_url})")
             continue # Skip to the next URL
 
         # --- Validation for the response from this specific URL ---
         if not isinstance(response_data, dict):
-            logger.error(f"Unexpected data type received from {endpoint} for URL {ranking_url}. Expected dict, got {type(response_data)}.")
+            logger.error(f"Unexpected data type received from {endpoint} for URL {target_ranking_url} (Original: {original_ranking_url}). Expected dict, got {type(response_data)}.")
             continue
 
         if response_data.get("status") != "success":
-            logger.error(f"API request to {endpoint} for URL {ranking_url} was not successful. Status: {response_data.get('status')}. Message: {response_data.get('message', 'N/A')}")
+            logger.error(f"API request to {endpoint} for URL {target_ranking_url} (Original: {original_ranking_url}) was not successful. Status: {response_data.get('status')}. Message: {response_data.get('message', 'N/A')}")
             continue
 
         articles_list = response_data.get("data")
         if not isinstance(articles_list, list):
-            logger.error(f"Expected 'data' field in response for URL {ranking_url} to be a list, but got {type(articles_list)}.")
+            logger.error(f"Expected 'data' field in response for URL {target_ranking_url} (Original: {original_ranking_url}) to be a list, but got {type(articles_list)}.")
             continue
 
         # Validate items within the list and deduplicate
@@ -105,8 +122,8 @@ def get_ranking() -> list:
                     articles_found_this_url += 1
                 # else: logger.debug(f"Duplicate article skipped: {article_link}") # Optional: log duplicates
             else:
-                logger.warning(f"Skipping invalid article item in ranking response from {ranking_url}: {item}")
-        logger.info(f"Found {articles_found_this_url} new, valid articles from URL: {ranking_url}")
+                logger.warning(f"Skipping invalid article item in ranking response from {target_ranking_url} (Original: {original_ranking_url}): {item}")
+        logger.info(f"Found {articles_found_this_url} new, valid articles from URL: {target_ranking_url} (Original: {original_ranking_url})")
 
 
     if not all_articles:
@@ -120,6 +137,7 @@ def get_ranking() -> list:
 def get_article_content(article_url: str) -> dict | None:
     """
     Fetches the content of a specific Yahoo News article.
+    Optionally replaces the base URL if configured.
     The API is assumed to take the article URL as a query parameter.
 
     Args:
@@ -129,32 +147,49 @@ def get_article_content(article_url: str) -> dict | None:
         A dictionary containing the article details (e.g., {'title': '...', 'content': '...'})
         or None if an error occurs.
     """
-    logger.info(f"Fetching article content for: {article_url}")
+    YAHOO_JP_PREFIX = "https://news.yahoo.co.jp/"
+    target_url = article_url # Use a new variable for the potentially modified URL
+
+    # Check for URL override
+    override_base = config_manager.get("yahoo_article_url_override_base")
+    if override_base and isinstance(override_base, str) and target_url.startswith(YAHOO_JP_PREFIX):
+        # Ensure override_base ends with '/' if it doesn't already
+        if not override_base.endswith('/'):
+            override_base += '/'
+        # Replace the prefix
+        original_path = target_url[len(YAHOO_JP_PREFIX):]
+        target_url = urljoin(override_base, original_path) # Use urljoin for safety
+        logger.info(f"Replacing Yahoo JP prefix. Original URL: {article_url}, New URL for API call: {target_url}")
+    else:
+        logger.debug(f"No URL override applied for: {article_url}")
+
+
+    logger.info(f"Fetching article content for: {target_url} (Original: {article_url})")
     endpoint = "/yahoo/article"
-    params = {'url': article_url} # API takes URL as query param 'url'
+    params = {'url': target_url} # API takes URL as query param 'url'
     response_data = _make_request("GET", endpoint, params=params)
 
     if response_data is None:
-        logger.error(f"Failed to fetch article content for {article_url} or received None.")
+        logger.error(f"Failed to fetch article content for {target_url} (Original: {article_url}) or received None.")
         return None
 
     # --- New Validation based on provided structure ---
     if not isinstance(response_data, dict):
-        logger.error(f"Unexpected data type received from {endpoint} for {article_url}. Expected dict, got {type(response_data)}.")
+        logger.error(f"Unexpected data type received from {endpoint} for {target_url} (Original: {article_url}). Expected dict, got {type(response_data)}.")
         return None
 
     if response_data.get("status") != "success":
-        logger.error(f"API request to {endpoint} for {article_url} was not successful. Status: {response_data.get('status')}. Message: {response_data.get('message', 'N/A')}")
+        logger.error(f"API request to {endpoint} for {target_url} (Original: {article_url}) was not successful. Status: {response_data.get('status')}. Message: {response_data.get('message', 'N/A')}")
         return None
 
     article_data = response_data.get("data")
     if not isinstance(article_data, dict):
-        logger.error(f"Expected 'data' field in article response to be a dict, but got {type(article_data)} for {article_url}.")
+        logger.error(f"Expected 'data' field in article response to be a dict, but got {type(article_data)} for {target_url} (Original: {article_url}).")
         return None
 
     # Optional: Add checks for expected keys like 'title', 'body' within article_data if needed
     # if 'title' not in article_data or 'body' not in article_data:
-    #     logger.warning(f"Article data for {article_url} might be missing expected keys ('title', 'body').")
+    #     logger.warning(f"Article data for {target_url} (Original: {article_url}) might be missing expected keys ('title', 'body').")
 
-    logger.info(f"Successfully fetched and parsed content for article: {article_url}")
+    logger.info(f"Successfully fetched and parsed content for article: {target_url} (Original: {article_url})")
     return article_data # Return the inner data dictionary
