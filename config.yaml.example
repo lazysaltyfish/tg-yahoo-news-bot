@@ -50,12 +50,13 @@ openai_max_tokens: 1000
 # Default: 0.7
 openai_temperature: 0.7
 
-# Optional: Base URL to replace 'https://news.yahoo.co.jp/' when fetching article content.
-# If set, any article URL starting with 'https://news.yahoo.co.jp/' will have that prefix
-# replaced by this value before being sent to the API defined by 'api_base_url'.
+# Optional: Base URL to replace 'https://news.yahoo.co.jp/' when fetching article content
+# or when constructing the ranking API request URL.
+# If set, any URL starting with 'https://news.yahoo.co.jp/' will have that prefix
+# replaced by this value before being used.
 # Ensure this URL ends with a '/'.
 # Default: null (no replacement)
-yahoo_article_url_override_base: null # Or "YOUR_REPLACEMENT_YAHOO_BASE_URL/"
+yahoo_url_override_base: null # Or "YOUR_REPLACEMENT_YAHOO_BASE_URL/"
 
 # List of keywords (case-insensitive). If any keyword is found within a generated hashtag,
 # the article will not be posted to Telegram. Leave empty or comment out to disable.

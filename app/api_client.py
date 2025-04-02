@@ -72,7 +72,7 @@ def get_ranking() -> list:
     seen_article_links = set()
 
     YAHOO_JP_PREFIX = "https://news.yahoo.co.jp/"
-    override_base = config_manager.get("yahoo_article_url_override_base") # Get override base once
+    override_base = config_manager.get("yahoo_url_override_base") # Get override base once
 
     for i, original_ranking_url in enumerate(ranking_urls):
         target_ranking_url = original_ranking_url # URL to be potentially modified
@@ -151,7 +151,7 @@ def get_article_content(article_url: str) -> dict | None:
     target_url = article_url # Use a new variable for the potentially modified URL
 
     # Check for URL override
-    override_base = config_manager.get("yahoo_article_url_override_base")
+    override_base = config_manager.get("yahoo_url_override_base")
     if override_base and isinstance(override_base, str) and target_url.startswith(YAHOO_JP_PREFIX):
         # Ensure override_base ends with '/' if it doesn't already
         if not override_base.endswith('/'):
