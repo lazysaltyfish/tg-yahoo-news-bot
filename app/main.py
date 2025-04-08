@@ -187,7 +187,7 @@ async def run_check(bot: Bot):
 
             # --- Calculate Lengths and Truncate Body if Needed ---
             MAX_TELEGRAM_MESSAGE_LENGTH = 4096
-            TRUNCATION_SUFFIX = "..." # Suffix for truncated body
+            TRUNCATION_SUFFIX = escape_markdown_v2("(未完，请看原文)") # Suffix for truncated body
 
             # Calculate length of non-body parts
             fixed_parts_length = len(title_part) + len(link_part) + len(time_part) + len(hashtags_part)
