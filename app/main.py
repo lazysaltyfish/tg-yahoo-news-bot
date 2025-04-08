@@ -1,12 +1,16 @@
 import logging
-import time
-import schedule
 import asyncio
 import re
 import pytz
 from datetime import datetime
+from telegram import Bot
+from telegram.ext import Application, ApplicationBuilder
+
+# Import application modules
 from app import logger_setup, api_client, data_handler, telegram_poster, openai_translator
 from app.config import config_manager
+from app.stats_manager import increment_stat, reset_all_stats # Use convenience functions
+from app.bot_interface import setup_bot_handlers # Import the handler setup function
 
 # --- Setup ---
 logger_setup.setup_logging()
@@ -15,6 +19,7 @@ config_manager.log_loaded_config() # Log the loaded configuration via the manage
 
 # --- Telegram MarkdownV2 Escaping ---
 # Characters to escape: _ * [ ] ( ) ~ ` > # + - = | { } . !
+# Keep this here as run_check uses it for posting. bot_interface has its own copy.
 def escape_markdown_v2(text: str) -> str:
     """Escapes text for Telegram MarkdownV2 parsing."""
     if not isinstance(text, str):
@@ -25,17 +30,31 @@ def escape_markdown_v2(text: str) -> str:
     return re.sub(f'([{re.escape(escape_chars)}])', r'\\\1', text)
 
 # --- Core Task ---
-async def run_check():
+async def run_check(bot: Bot):
     """Fetches news, translates new articles, and posts them to Telegram."""
     logger.info("Starting news check run...")
+    # Optionally reset stats per run? Or keep them cumulative? Let's keep cumulative for now.
+    # reset_all_stats() # Uncomment to reset stats each run
 
     # 1. Fetch ranking
-    ranking_data = api_client.get_ranking()
-    if ranking_data is None:
-        logger.error("Could not fetch news ranking. Skipping run.")
-        return
-    if not ranking_data:
+    ranking_data = None
+    try:
+        ranking_data = api_client.get_ranking()
+        if ranking_data is not None:
+            increment_stat("fetches_success")
+        else:
+            # Handles None case from get_ranking
+            increment_stat("fetches_fail")
+            logger.error("Could not fetch news ranking (received None). Skipping run.")
+            return
+    except Exception as e:
+        increment_stat("fetches_fail")
+        logger.exception(f"Error fetching news ranking: {e}. Skipping run.")
+        return # Exit if fetch fails critically
+
+    if not ranking_data: # Handles empty list case
         logger.info("No articles found in ranking. Skipping run.")
+        # Don't count this as a failure, just no data
         return
 
     # 2. Load already posted articles
@@ -77,19 +96,30 @@ async def run_check():
                 logger.warning(f"Article body is empty or not a string for {article_link}.")
         else:
             logger.warning(f"Could not get body content for {article_link}.")
+            # Don't skip yet, maybe translation can work with title only? Or maybe skip?
+            # Let's skip if body is essential for translation/posting quality.
+            # increment_stat("fetches_fail") # Or a different stat?
             continue # Skip this article if body is not found
 
         # 5. Translate Title, Body and Generate Hashtags using OpenAI
-        logger.info(f"--> Calling OpenAI translator for: {article_link}") # Log before call
-        translation_result = await openai_translator.translate_and_summarize_article(
-            title=original_title,
-            body=original_body # Pass empty string if body wasn't found
-        )
-        logger.info(f"<-- Returned from OpenAI translator for: {article_link}. Result: {'Success' if translation_result else 'Failure'}") # Log after call
-
-        if not translation_result:
-            logger.error(f"Failed to get translation/hashtags from OpenAI for {article_link}. Skipping article.")
-            continue # Skip this article if OpenAI call fails
+        translation_result = None
+        try:
+            logger.info(f"--> Calling OpenAI translator for: {article_link}")
+            translation_result = await openai_translator.translate_and_summarize_article(
+                title=original_title,
+                body=original_body
+            )
+            logger.info(f"<-- Returned from OpenAI translator for: {article_link}. Result: {'Success' if translation_result else 'Failure'}")
+            if translation_result:
+                increment_stat("translations_success")
+            else:
+                increment_stat("translations_fail")
+                logger.error(f"Failed to get translation/hashtags from OpenAI for {article_link}. Skipping article.")
+                continue # Skip this article if OpenAI call fails
+        except Exception as e:
+            increment_stat("translations_fail")
+            logger.exception(f"Error during OpenAI translation for {article_link}: {e}. Skipping article.")
+            continue
 
         translated_title = translation_result.get('translated_title', '')
         translated_body = translation_result.get('translated_body', '')
@@ -97,21 +127,23 @@ async def run_check():
 
         if not translated_title: # Title is essential
              logger.error(f"OpenAI did not return a translated title for {article_link}. Skipping article.")
+             # Already counted as translation fail above
              continue
 
         # --- Check for Skip Keywords in Hashtags ---
         should_skip = False
-        skip_keywords = config_manager.get("skip_keywords", []) # Get current skip keywords
+        skip_keywords = config_manager.get("skip_keywords", [])
         if skip_keywords:
             for tag in hashtags:
-                tag_lower = tag.lower() # Case-insensitive check
+                tag_lower = tag.lower()
                 for keyword in skip_keywords:
                     if keyword in tag_lower:
                         logger.info(f"Skipping article '{original_title}' ({article_link}) due to keyword '{keyword}' found in hashtag '{tag}'.")
                         should_skip = True
-                        break # Stop checking keywords for this tag
+                        increment_stat("skips_keyword") # Increment skip counter
+                        break
                 if should_skip:
-                    break # Stop checking tags for this article
+                    break
 
         # 6. Format Message (only if not skipping)
         message = ""
@@ -135,14 +167,12 @@ async def run_check():
                     jst = pytz.timezone('Asia/Tokyo')
                     jst_time = utc_time.astimezone(jst)
                     formatted_time_str = jst_time.strftime('%Y-%m-%d %H:%M')
-                except ValueError:
-                    logger.warning(f"Could not parse publication time: {publication_time_iso}")
                 except Exception as time_e:
-                     logger.error(f"Error formatting time '{publication_time_iso}': {time_e}")
+                     logger.error(f"Could not parse/format publication time '{publication_time_iso}': {time_e}")
 
             escaped_time = escape_markdown_v2(formatted_time_str)
 
-            # Construct the message (adjust formatting as desired)
+            # Construct the message
             message = f"*{escaped_title}*\n\n"
             if escaped_content:
                  message += f"{escaped_content}\n\n"
@@ -150,7 +180,6 @@ async def run_check():
             if escaped_time:
                  message += f"\n_{escaped_time}_"
 
-            # Add hashtags (escaped)
             if hashtags:
                 valid_hashtags = [f"#{tag.lstrip('#')}" for tag in hashtags if isinstance(tag, str) and tag]
                 if valid_hashtags:
@@ -158,77 +187,129 @@ async def run_check():
                     message += "\n\n" + " ".join(escaped_hashtags)
 
         # 7. Post to Telegram (conditionally)
-        message_id = None # Initialize message_id
+        message_id = None
+        post_success = False
         if not should_skip:
-            if message: # Ensure message is not empty before posting
+            if message:
                 logger.debug(f"Formatted message for {article_link}:\n{message}")
-                message_id = await telegram_poster.post_message(message)
-                if message_id is None:
-                    logger.error(f"Failed to post article to Telegram (received None message_id): {article_link}")
+                try:
+                    # Pass the bot instance here
+                    message_id = await telegram_poster.post_message(bot, message)
+                    if message_id is not None:
+                        increment_stat("posts_success")
+                        post_success = True
+                    else:
+                        increment_stat("posts_fail")
+                        logger.error(f"Failed to post article to Telegram (received None message_id): {article_link}")
+                except Exception as e:
+                    increment_stat("posts_fail")
+                    logger.exception(f"Error posting message for {article_link}: {e}")
             else:
+                 increment_stat("posts_fail") # Count as failure if message is empty
                  logger.error(f"Message formatting resulted in empty message for {article_link}. Cannot post.")
-        # If should_skip is True, message_id remains None
+        # If should_skip is True, message_id remains None, post_success remains False
 
         # 8. Update posted articles file (conditionally)
         # Only add if skipped OR if posting was attempted and successful
-        if should_skip or (not should_skip and message_id is not None):
+        if should_skip or post_success:
             logger.info(f"Adding article to posted list. Skipped: {should_skip}, Message ID: {message_id}, URL: {article_link}")
             data_handler.add_posted_article(
-                filepath=config_manager.get("posted_articles_file"), # Get current path
+                filepath=config_manager.get("posted_articles_file"),
                 url=article_link,
-                title=original_title, # Store original title for tracking
+                title=original_title,
                 message_id=message_id, # Will be None if skipped
-                skipped=should_skip # Pass the skip status
+                skipped=should_skip
             )
-        elif not should_skip and message_id is None:
-            logger.warning(f"Article posting failed (Message ID is None) and was not skipped. NOT adding to posted list. URL: {article_link}")
-        # If should_skip is False and message_id is None (post failed), we do nothing here, allowing retry next time.
-        if not should_skip and message_id is not None:
+        elif not should_skip and not post_success:
+            logger.warning(f"Article posting failed and was not skipped. NOT adding to posted list. URL: {article_link}")
+
+        if post_success:
              processed_count += 1 # Increment only if successfully posted
 
-        # A small delay between processing articles
-        await asyncio.sleep(5) # Sleep for 5 seconds
+        # A small delay between processing articles within a run
+        await asyncio.sleep(5) # Keep the 5-second delay
 
-    logger.info(f"--- run_check function finished. Processed {processed_count} new articles. ---") # Log end of function
+    logger.info(f"--- run_check function finished. Processed {processed_count} new articles this run. ---")
 
 
-# --- Scheduler Integration ---
-def run_scheduled_task():
-    """Wrapper to run the async task using asyncio."""
-    logger.info("Scheduler triggered run_check...")
+# --- Background Task for Scheduled Checks ---
+async def scheduled_news_check(application: Application):
+    """Runs the news check periodically."""
+    interval_minutes = config_manager.get("schedule_interval_minutes", 10)
+    interval_seconds = interval_minutes * 60
+    logger.info(f"News check scheduled to run every {interval_minutes} minutes ({interval_seconds} seconds).")
+
+    # Run once immediately at startup after a short delay to allow bot connection
+    logger.info("Running initial news check shortly after startup...")
+    await asyncio.sleep(10) # Wait 10 seconds before first check
     try:
-        asyncio.run(run_check())
+        await run_check(application.bot)
     except Exception as e:
-        logger.exception("An error occurred during the scheduled task execution.")
+        logger.exception("Error during initial news check run.")
 
-# --- Main Execution ---
-if __name__ == "__main__":
-    # Get initial schedule interval
-    schedule_interval = config_manager.get("schedule_interval_minutes")
-    logger.info(f"Starting Yahoo News Bot. Initial check interval: {schedule_interval} minutes.")
+    # Then run in a loop
+    while True:
+        await asyncio.sleep(interval_seconds)
+        logger.info(f"Scheduled interval ({interval_minutes} min) elapsed. Running news check...")
+        try:
+            await run_check(application.bot)
+        except Exception as e:
+            logger.exception("Error during scheduled news check run.")
+
+
+# --- Main Application Setup and Run ---
+async def main():
+    """Sets up and runs the Telegram bot and the scheduled news checker."""
+    logger.info("Starting application setup...")
+
+    # Ensure essential config is present before building app
+    bot_token = config_manager.get("telegram_bot_token")
+    if not bot_token:
+        logger.critical("Telegram Bot Token not found in configuration. Exiting.")
+        return # Cannot proceed without token
+
+    # Build the Telegram Application
+    logger.info("Building Telegram application...")
+    application = ApplicationBuilder().token(bot_token).build()
+
+    # Add command handlers (e.g., /stats)
+    setup_bot_handlers(application)
+
+    # Start configuration file watcher in a separate thread
     logger.info("Starting configuration file watcher...")
-    config_manager.start_watching() # Start monitoring config.yaml
+    config_manager.start_watching()
 
-    # Run once immediately at startup
-    logger.info("Running initial check...")
-    run_scheduled_task()
-
-    # Schedule the task using the initial interval
-    # Note: Changes to schedule_interval_minutes in config.yaml will require a restart
-    # to affect the schedule, as per the plan.
-    logger.info(f"Scheduling checks every {schedule_interval} minutes.")
-    schedule.every(schedule_interval).minutes.do(run_scheduled_task)
-
-    # Keep the script running to allow the scheduler to work
+    # Run the application and the background task concurrently
     try:
-        while True:
-            schedule.run_pending()
-            time.sleep(60) # Check every minute if jobs are due
-    except KeyboardInterrupt:
-        logger.info("Shutdown signal received (KeyboardInterrupt).")
+        logger.info("Starting bot polling and scheduled news checker...")
+        async with application: # Manages startup and shutdown of bot components
+            await application.initialize() # Initialize handlers, etc.
+            await application.start()      # Start network connections
+            await application.updater.start_polling() # Start fetching updates
+
+            # Create and run the background news check task
+            news_check_task = asyncio.create_task(scheduled_news_check(application))
+            logger.info("Application started successfully. Waiting for tasks...")
+
+            # Keep the main function alive until tasks are done or interrupted
+            # In this case, news_check_task runs forever until cancelled
+            await news_check_task # This will run indefinitely
+
+    except (KeyboardInterrupt, SystemExit):
+        logger.info("Shutdown signal received.")
     except Exception as e:
-        logger.exception(f"An unexpected error occurred in the main loop: {e}")
+        logger.exception(f"An unexpected error occurred in the main execution: {e}")
     finally:
+        logger.info("Starting shutdown process...")
+        # Stop the configuration watcher
         logger.info("Stopping configuration file watcher...")
         config_manager.stop_watching()
-        logger.info("Yahoo News Bot shutting down.")
+
+        # Application shutdown is handled by 'async with application:' context manager
+        # It calls application.stop(), application.updater.stop(), application.shutdown()
+
+        logger.info("Application shutdown complete.")
+
+
+if __name__ == "__main__":
+    asyncio.run(main())

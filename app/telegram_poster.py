@@ -12,29 +12,33 @@ logger = logging.getLogger(__name__)
 # issues with async event loops if the main script structure changes.
 # Let's initialize per call for simplicity here.
 
-async def post_message(message: str):
+async def post_message(bot: Bot, message: str):
     """
-    Sends a message to the configured Telegram channel using the bot token.
+    Sends a message to the configured Telegram channel using the provided bot instance.
 
     Args:
+        bot: The initialized telegram.Bot instance.
         message: The text message to send. Supports MarkdownV2 formatting.
 
     Returns:
         The message_id of the sent message if successful, None otherwise.
     """
-    bot_token = config_manager.get("telegram_bot_token")
+    # Get channel ID from config
     channel_id = config_manager.get("telegram_channel_id")
 
-    if not bot_token or not channel_id:
-        logger.error("Telegram Bot Token or Channel ID is not configured. Cannot send message.")
+    if not channel_id:
+        logger.error("Telegram Channel ID is not configured. Cannot send message.")
         return None # Return None for consistency with other error returns
+    if not bot:
+        logger.error("Telegram Bot instance was not provided. Cannot send message.")
+        return None
 
     if not message:
         logger.warning("Attempted to send an empty message to Telegram.")
         return None # Return None for consistency
 
-    bot = Bot(token=bot_token)
-    logger.info(f"Attempting to send message to Telegram channel {channel_id}...")
+    # Bot instance is now passed in
+    logger.info(f"Attempting to send message to Telegram channel {channel_id} using provided bot instance...")
 
     try:
         # Note: Sending messages requires an async context if using python-telegram-bot v20+

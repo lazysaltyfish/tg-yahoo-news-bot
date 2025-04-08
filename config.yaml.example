@@ -65,3 +65,9 @@ yahoo_url_override_base: null # Or "YOUR_REPLACEMENT_YAHOO_BASE_URL/"
 skip_keywords:
   #- keyword1
   #- keyword2
+
+# List of Telegram User IDs authorized to use bot commands (like /stats).
+# Leave empty to allow all users.
+# Example: [123456789, 987654321]
+# Default: [] (empty list)
+authorized_user_ids: []

@@ -13,6 +13,7 @@ DEFAULT_CONFIG = {
     "openai_temperature": 0.7,
     "skip_keywords": [], # Default to empty list
     "openai_api_base_url": None, # Default to None (use OpenAI default)
+    "authorized_user_ids": [], # Default to empty list (allow all users)
     # Required keys don't strictly need defaults here if they MUST be in the file,
     # but providing None helps structure. The manager handles validation.
     "api_base_url": None,
