@@ -172,19 +172,45 @@ async def run_check(bot: Bot):
 
             escaped_time = escape_markdown_v2(formatted_time_str)
 
-            # Construct the message
-            message = f"*{escaped_title}*\n\n"
-            if escaped_content:
-                 message += f"{escaped_content}\n\n"
-            message += f"[原文链接]({article_link})"
-            if escaped_time:
-                 message += f"\n_{escaped_time}_"
+            # --- Assemble Message Components ---
+            title_part = f"*{escaped_title}*\n\n"
+            content_part = f"{escaped_content}\n\n" if escaped_content else ""
+            link_part = f"[原文链接]({article_link})"
+            time_part = f"\n_{escaped_time}_" if escaped_time else ""
 
+            hashtags_part = ""
             if hashtags:
                 valid_hashtags = [f"#{tag.lstrip('#')}" for tag in hashtags if isinstance(tag, str) and tag]
                 if valid_hashtags:
-                    escaped_hashtags = [escape_markdown_v2(tag) for tag in valid_hashtags]
-                    message += "\n\n" + " ".join(escaped_hashtags)
+                    escaped_tags = [escape_markdown_v2(tag) for tag in valid_hashtags]
+                    hashtags_part = "\n\n" + " ".join(escaped_tags)
+
+            # --- Calculate Lengths and Truncate Body if Needed ---
+            MAX_TELEGRAM_MESSAGE_LENGTH = 4096
+            TRUNCATION_SUFFIX = "..." # Suffix for truncated body
+
+            # Calculate length of non-body parts
+            fixed_parts_length = len(title_part) + len(link_part) + len(time_part) + len(hashtags_part)
+
+            # Calculate maximum allowed length for the body content
+            max_content_length = MAX_TELEGRAM_MESSAGE_LENGTH - fixed_parts_length - len(TRUNCATION_SUFFIX)
+
+            # Truncate the content_part if it makes the total message too long
+            if escaped_content and len(content_part) > max_content_length:
+                 if max_content_length > 0:
+                    # Truncate the original escaped_content string
+                    truncated_escaped_content = escaped_content[:max_content_length] + TRUNCATION_SUFFIX
+                    # Recreate the content_part with the truncated version
+                    content_part = f"{truncated_escaped_content}\n\n"
+                    logger.warning(f"Message body for {article_link} was too long. Truncated body content.")
+                 else:
+                    # Edge case: Fixed parts alone are too long or leave no space for body
+                    content_part = "" # Remove body entirely if no space
+                    logger.warning(f"Message for {article_link} too long even without body. Removing body content.")
+
+
+            # --- Construct Final Message ---
+            message = title_part + content_part + link_part + time_part + hashtags_part
 
         # 7. Post to Telegram (conditionally)
         message_id = None
