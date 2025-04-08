@@ -169,15 +169,20 @@ async def run_check():
                  logger.error(f"Message formatting resulted in empty message for {article_link}. Cannot post.")
         # If should_skip is True, message_id remains None
 
-        # 8. Update posted articles file (always, regardless of skip status)
-        # Note: message_id will be None if skipped or if posting failed
-        data_handler.add_posted_article(
-            filepath=config_manager.get("posted_articles_file"), # Get current path
-            url=article_link,
-            title=original_title, # Store original title for tracking
-            message_id=message_id,
-            skipped=should_skip # Pass the skip status
-        )
+        # 8. Update posted articles file (conditionally)
+        # Only add if skipped OR if posting was attempted and successful
+        if should_skip or (not should_skip and message_id is not None):
+            logger.info(f"Adding article to posted list. Skipped: {should_skip}, Message ID: {message_id}, URL: {article_link}")
+            data_handler.add_posted_article(
+                filepath=config_manager.get("posted_articles_file"), # Get current path
+                url=article_link,
+                title=original_title, # Store original title for tracking
+                message_id=message_id, # Will be None if skipped
+                skipped=should_skip # Pass the skip status
+            )
+        elif not should_skip and message_id is None:
+            logger.warning(f"Article posting failed (Message ID is None) and was not skipped. NOT adding to posted list. URL: {article_link}")
+        # If should_skip is False and message_id is None (post failed), we do nothing here, allowing retry next time.
         if not should_skip and message_id is not None:
              processed_count += 1 # Increment only if successfully posted
 
