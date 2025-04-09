@@ -3,7 +3,7 @@ import asyncio
 import re
 import pytz
 from datetime import datetime
-from telegram import Bot
+from telegram import Bot, BotCommand
 from telegram.ext import Application, ApplicationBuilder
 
 # Import application modules
@@ -311,6 +311,18 @@ async def main():
             await application.initialize() # Initialize handlers, etc.
             await application.start()      # Start network connections
             await application.updater.start_polling() # Start fetching updates
+
+            # --- Set Bot Commands for UI Hint ---
+            commands = [
+                BotCommand("stats", "Show bot statistics"),
+                BotCommand("filterwords", "Show current filter words")
+            ]
+            try:
+                await application.bot.set_my_commands(commands)
+                logger.info("Successfully set bot commands for UI hints.")
+            except Exception as e:
+                logger.error(f"Failed to set bot commands: {e}")
+            # --- End Set Bot Commands ---
 
             # Create and run the background news check task
             news_check_task = asyncio.create_task(scheduled_news_check(application))
