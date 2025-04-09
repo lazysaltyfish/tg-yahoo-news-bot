@@ -31,8 +31,31 @@ openai_model: "gpt-3.5-turbo"
 posted_articles_file: "data/posted_articles.json"
 
 # Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-# Default: DEBUG
-log_level: "DEBUG"
+# This is the global default level applied to the root logger.
+# Modules will inherit this level unless overridden below.
+# Default: INFO
+log_level: "INFO"
+
+# Specific log levels for different modules (optional)
+# Use this section to set different logging verbosity for specific parts
+# of the application or libraries. Keys are logger names (often module paths),
+# and values are the desired log level (DEBUG, INFO, WARNING, ERROR, CRITICAL).
+# If a logger's name (or its parent's name) matches a key here, this level
+# will be applied directly to that logger. Otherwise, it inherits the root level.
+log_levels:
+  # Example: Enable detailed debugging logs for the API client module
+  # app.api_client: "DEBUG"
+
+  # Example: Reduce log noise from the httpx library (used for HTTP requests)
+  # httpx: "WARNING"
+
+  # Example: Set a specific level for the data handler
+  # app.data_handler: "INFO"
+
+  # Add more entries as needed, e.g.:
+  # "another.library": "ERROR"
+  # "app.specific_feature": "DEBUG"
+
 
 # How often to check for new news (in minutes)
 # Default: 10
