@@ -39,7 +39,7 @@ async def run_check(bot: Bot):
     # 1. Fetch ranking
     ranking_data = None
     try:
-        ranking_data = api_client.get_ranking()
+        ranking_data = await api_client.get_ranking()
         if ranking_data is not None:
             increment_stat("fetches_success")
         else:
@@ -86,7 +86,7 @@ async def run_check(bot: Bot):
         logger.info(f"Processing new article: {original_title} ({article_link})")
 
         # --- Fetch Article Content ---
-        content_data = api_client.get_article_content(article_link)
+        content_data = await api_client.get_article_content(article_link)
         original_body = ""
         if content_data and 'body' in content_data:
             body_text = content_data['body']

@@ -1,17 +1,17 @@
 import logging
-import requests
+import asyncio
+import aiohttp
 from urllib.parse import urljoin, urlencode
 from .config import config_manager
 
 logger = logging.getLogger(__name__)
 
-# Use a session object for potential connection reuse and default headers
-session = requests.Session()
-# You could add default headers here if needed, e.g.:
-# session.headers.update({'User-Agent': 'YahooNewsTelegramBot/1.0'})
+# Note: aiohttp.ClientSession is typically created once and reused.
+# For simplicity here, we create it per request in _make_request.
+# Consider managing a single session instance in main.py for better performance.
 
-def _make_request(method: str, endpoint: str, params: dict = None, json_data: dict = None) -> dict | None:
-    """Helper function to make API requests and handle common errors."""
+async def _make_request(method: str, endpoint: str, params: dict = None, json_data: dict = None) -> dict | None:
+    """Helper function to make async API requests and handle common errors."""
     # Construct URL manually to avoid urljoin issues with base path
     base_url = config_manager.get("api_base_url")
     if not base_url: # Check if base_url is None or empty
@@ -23,37 +23,54 @@ def _make_request(method: str, endpoint: str, params: dict = None, json_data: di
     relative_endpoint = endpoint.lstrip('/')
     full_url = urljoin(base_url, relative_endpoint)
 
-    try:
-        logger.debug(f"Making {method} request to {full_url} with params={params}, json={json_data}")
-        response = session.request(method, full_url, params=params, json=json_data, timeout=30) # 30-second timeout
-        response.raise_for_status() # Raises HTTPError for bad responses (4xx or 5xx)
-
-        # Handle potential empty responses or non-JSON responses gracefully
-        if response.status_code == 204: # No Content
-             logger.info(f"Received 204 No Content from {full_url}")
-             return {} # Or None, depending on expected behavior
-        if not response.content:
-             logger.warning(f"Received empty response body from {full_url}")
-             return None
-
+    # Create a session for each request - less efficient but simpler for now
+    async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=30)) as session:
         try:
-            return response.json()
-        except requests.exceptions.JSONDecodeError:
-            logger.exception(f"Failed to decode JSON response from {full_url}. Response text: {response.text[:200]}...") # Log snippet
+            logger.debug(f"Making async {method} request to {full_url} with params={params}, json={json_data}")
+            async with session.request(method, full_url, params=params, json=json_data) as response:
+                # Check status code
+                if response.status == 204: # No Content
+                    logger.info(f"Received 204 No Content from {full_url}")
+                    return {} # Or None, depending on expected behavior
+
+                # Raises ClientResponseError for bad responses (4xx or 5xx)
+                response.raise_for_status()
+
+                # Handle potential empty responses or non-JSON responses gracefully
+                # Check content length header first if available
+                if response.content_length == 0:
+                     logger.warning(f"Received empty response body (Content-Length: 0) from {full_url}")
+                     return None
+
+                try:
+                    # Use content_type='application/json' to avoid issues if server sends wrong type
+                    json_response = await response.json(content_type=None)
+                    if json_response is None: # Handle cases where response.json() returns None
+                         logger.warning(f"Received null JSON response from {full_url}")
+                         return None
+                    return json_response
+                except aiohttp.ContentTypeError:
+                    # Log the actual content type and some text
+                    response_text = await response.text()
+                    logger.exception(f"Failed to decode JSON response from {full_url}. Content-Type: {response.content_type}. Response text: {response_text[:200]}...")
+                    return None
+                except Exception as json_e: # Catch potential json.JSONDecodeError etc.
+                    response_text = await response.text()
+                    logger.exception(f"Error decoding JSON from {full_url}: {json_e}. Response text: {response_text[:200]}...")
+                    return None
+
+        except asyncio.TimeoutError:
+            logger.error(f"Request timed out for {method} {full_url}")
+            return None
+        except aiohttp.ClientError as e: # Includes ClientConnectionError, ClientResponseError etc.
+            logger.exception(f"aiohttp client error during {method} request to {full_url}: {e}")
+            return None
+        except Exception as e:
+            logger.exception(f"An unexpected error occurred during async API request to {full_url}: {e}")
             return None
 
-    except requests.exceptions.Timeout:
-        logger.error(f"Request timed out for {method} {full_url}")
-        return None
-    except requests.exceptions.RequestException as e:
-        logger.exception(f"Error during {method} request to {full_url}: {e}")
-        return None
-    except Exception as e:
-        logger.exception(f"An unexpected error occurred during API request to {full_url}: {e}")
-        return None
 
-
-def get_ranking() -> list:
+async def get_ranking() -> list:
     """
     Fetches Yahoo News ranking from multiple configured URLs, combines, and deduplicates.
 
@@ -91,7 +108,7 @@ def get_ranking() -> list:
 
         logger.info(f"Fetching ranking from URL {i+1}/{len(ranking_urls)}: {target_ranking_url} (Original: {original_ranking_url})")
         params = {'url': target_ranking_url} # Pass the potentially modified ranking URL to the API
-        response_data = _make_request("GET", endpoint, params=params)
+        response_data = await _make_request("GET", endpoint, params=params)
 
         if response_data is None:
             logger.error(f"Failed to fetch ranking data or received None for URL: {target_ranking_url} (Original: {original_ranking_url})")
@@ -134,7 +151,7 @@ def get_ranking() -> list:
     return all_articles
 
 
-def get_article_content(article_url: str) -> dict | None:
+async def get_article_content(article_url: str) -> dict | None:
     """
     Fetches the content of a specific Yahoo News article.
     Optionally replaces the base URL if configured.
@@ -167,7 +184,7 @@ def get_article_content(article_url: str) -> dict | None:
     logger.info(f"Fetching article content for: {target_url} (Original: {article_url})")
     endpoint = "/yahoo/article"
     params = {'url': target_url} # API takes URL as query param 'url'
-    response_data = _make_request("GET", endpoint, params=params)
+    response_data = await _make_request("GET", endpoint, params=params)
 
     if response_data is None:
         logger.error(f"Failed to fetch article content for {target_url} (Original: {article_url}) or received None.")
