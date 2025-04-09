@@ -11,7 +11,6 @@ from app import logger_setup, api_client, data_handler, telegram_poster, openai_
 from app.config import config_manager
 from app.stats_manager import increment_stat, reset_all_stats # Use convenience functions
 from app.bot_interface import setup_bot_handlers # Import the handler setup function
-
 # --- Setup ---
 logger_setup.setup_logging()
 logger = logging.getLogger(__name__)

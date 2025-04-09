@@ -3,6 +3,12 @@ from .config_manager import ConfigManager # Use relative import within the app p
 
 logger = logging.getLogger(__name__)
 
+# --- Application Start Time ---
+# Stored here to avoid circular imports between main and bot_interface
+import pytz
+from datetime import datetime
+BOT_START_TIME_UTC = datetime.now(pytz.utc)
+
 # --- Default Configuration Values ---
 # These values are used if not specified in config.yaml
 DEFAULT_CONFIG = {
