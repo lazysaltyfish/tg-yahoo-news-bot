@@ -38,7 +38,7 @@ async def post_message(bot: Bot, message: str):
         return None # Return None for consistency
 
     # Bot instance is now passed in
-    logger.info(f"Attempting to send message to Telegram channel {channel_id} using provided bot instance...")
+    logger.debug(f"Attempting to send message to Telegram channel {channel_id} using provided bot instance...")
 
     try:
         # Note: Sending messages requires an async context if using python-telegram-bot v20+

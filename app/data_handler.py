@@ -100,7 +100,7 @@ def add_posted_article(filepath: str, url: str, title: str, message_id: int | No
                         "skipped": skipped
                     }
                     log_msg_id = f"(Msg ID: {message_id})" if message_id else "(Skipped)"
-                    logger.info(f"Adding article to {filepath}: {url} {log_msg_id}")
+                    logger.debug(f"Adding article to {filepath}: {url} {log_msg_id}")
                 else:
                     # Optionally update skipped status if already exists? For now, just log.
                     logger.debug(f"Article already exists in {filepath}, not adding again: {url}")

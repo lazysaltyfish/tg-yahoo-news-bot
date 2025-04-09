@@ -30,7 +30,7 @@ async def _make_request(method: str, endpoint: str, params: dict = None, json_da
             async with session.request(method, full_url, params=params, json=json_data) as response:
                 # Check status code
                 if response.status == 204: # No Content
-                    logger.info(f"Received 204 No Content from {full_url}")
+                    logger.debug(f"Received 204 No Content from {full_url}")
                     return {} # Or None, depending on expected behavior
 
                 # Raises ClientResponseError for bad responses (4xx or 5xx)
@@ -102,11 +102,11 @@ async def get_ranking() -> list:
             # Replace the prefix
             original_path = target_ranking_url[len(YAHOO_JP_PREFIX):]
             target_ranking_url = urljoin(override_base, original_path) # Use urljoin for safety
-            logger.info(f"Replacing Yahoo JP prefix for ranking URL {i+1}. Original: {original_ranking_url}, New: {target_ranking_url}")
+            logger.debug(f"Replacing Yahoo JP prefix for ranking URL {i+1}. Original: {original_ranking_url}, New: {target_ranking_url}")
         else:
              logger.debug(f"No URL override applied for ranking URL: {original_ranking_url}")
 
-        logger.info(f"Fetching ranking from URL {i+1}/{len(ranking_urls)}: {target_ranking_url} (Original: {original_ranking_url})")
+        logger.debug(f"Fetching ranking from URL {i+1}/{len(ranking_urls)}: {target_ranking_url} (Original: {original_ranking_url})")
         params = {'url': target_ranking_url} # Pass the potentially modified ranking URL to the API
         response_data = await _make_request("GET", endpoint, params=params)
 
@@ -140,7 +140,7 @@ async def get_ranking() -> list:
                 # else: logger.debug(f"Duplicate article skipped: {article_link}") # Optional: log duplicates
             else:
                 logger.warning(f"Skipping invalid article item in ranking response from {target_ranking_url} (Original: {original_ranking_url}): {item}")
-        logger.info(f"Found {articles_found_this_url} new, valid articles from URL: {target_ranking_url} (Original: {original_ranking_url})")
+        logger.debug(f"Found {articles_found_this_url} new, valid articles from URL: {target_ranking_url} (Original: {original_ranking_url})")
 
 
     if not all_articles:
@@ -176,12 +176,12 @@ async def get_article_content(article_url: str) -> dict | None:
         # Replace the prefix
         original_path = target_url[len(YAHOO_JP_PREFIX):]
         target_url = urljoin(override_base, original_path) # Use urljoin for safety
-        logger.info(f"Replacing Yahoo JP prefix. Original URL: {article_url}, New URL for API call: {target_url}")
+        logger.debug(f"Replacing Yahoo JP prefix. Original URL: {article_url}, New URL for API call: {target_url}")
     else:
         logger.debug(f"No URL override applied for: {article_url}")
 
 
-    logger.info(f"Fetching article content for: {target_url} (Original: {article_url})")
+    logger.debug(f"Fetching article content for: {target_url} (Original: {article_url})")
     endpoint = "/yahoo/article"
     params = {'url': target_url} # API takes URL as query param 'url'
     response_data = await _make_request("GET", endpoint, params=params)
@@ -208,5 +208,5 @@ async def get_article_content(article_url: str) -> dict | None:
     # if 'title' not in article_data or 'body' not in article_data:
     #     logger.warning(f"Article data for {target_url} (Original: {article_url}) might be missing expected keys ('title', 'body').")
 
-    logger.info(f"Successfully fetched and parsed content for article: {target_url} (Original: {article_url})")
+    logger.debug(f"Successfully fetched and parsed content for article: {target_url} (Original: {article_url})")
     return article_data # Return the inner data dictionary

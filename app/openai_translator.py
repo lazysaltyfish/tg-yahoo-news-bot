@@ -64,7 +64,7 @@ async def translate_and_summarize_article(title: str, body: str) -> dict | None:
     client = None # Initialize client to None
     try:
         client = AsyncOpenAI(api_key=api_key, base_url=base_url)
-        logger.info(f"OpenAI client CREATED for request (Title: {title[:20]}...). Instance ID: {id(client)}") # Log creation
+        logger.debug(f"OpenAI client CREATED for request (Title: {title[:20]}...). Instance ID: {id(client)}") # Log creation
     except OpenAIError as e:
         logger.exception(f"Failed to initialize OpenAI client for request: {e}")
         return None
@@ -130,24 +130,24 @@ async def translate_and_summarize_article(title: str, body: str) -> dict | None:
                 logger.error(f"Invalid JSON structure received from OpenAI: {result_data}")
                 return None
 
-            logger.info(f"OpenAI function EXITING NORMALLY (Title: {title[:20]}...). Instance ID: {id(client)}") # Log normal exit
+            logger.debug(f"OpenAI function EXITING NORMALLY (Title: {title[:20]}...). Instance ID: {id(client)}") # Log normal exit
             logger.info(f"Successfully translated and generated hashtags for title: {title[:50]}...")
             return result_data
 
         except json.JSONDecodeError:
             logger.exception(f"Failed to decode JSON response from OpenAI. Response: {response_content[:500]}")
-            logger.info(f"OpenAI function EXITING AFTER JSON ERROR (Title: {title[:20]}...). Instance ID: {id(client)}") # Log exit
+            logger.debug(f"OpenAI function EXITING AFTER JSON ERROR (Title: {title[:20]}...). Instance ID: {id(client)}") # Log exit
             return None
         except Exception as e: # Catch other potential parsing errors
              logger.exception(f"Error processing OpenAI JSON response: {e}. Response: {response_content[:500]}")
-             logger.info(f"OpenAI function EXITING AFTER OTHER PARSE ERROR (Title: {title[:20]}...). Instance ID: {id(client)}") # Log exit
+             logger.debug(f"OpenAI function EXITING AFTER OTHER PARSE ERROR (Title: {title[:20]}...). Instance ID: {id(client)}") # Log exit
              return None
 
     except OpenAIError as e:
         logger.exception(f"OpenAI API error during translation: {e}")
-        logger.info(f"OpenAI function EXITING AFTER API ERROR (Title: {title[:20]}...). Instance ID: {id(client)}") # Log exit
+        logger.debug(f"OpenAI function EXITING AFTER API ERROR (Title: {title[:20]}...). Instance ID: {id(client)}") # Log exit
         return None
     except Exception as e:
         logger.exception(f"An unexpected error occurred during OpenAI call: {e}")
-        logger.info(f"OpenAI function EXITING AFTER UNEXPECTED ERROR (Title: {title[:20]}...). Instance ID: {id(client)}") # Log exit
+        logger.debug(f"OpenAI function EXITING AFTER UNEXPECTED ERROR (Title: {title[:20]}...). Instance ID: {id(client)}") # Log exit
         return None

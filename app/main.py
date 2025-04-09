@@ -59,7 +59,7 @@ async def run_check(bot: Bot):
     # 2. Load already posted articles
     posted_articles_file = config_manager.get("posted_articles_file")
     posted_articles = data_handler.load_posted_articles(posted_articles_file)
-    logger.info(f"Loaded {len(posted_articles)} previously posted article URLs.")
+    logger.debug(f"Loaded {len(posted_articles)} previously posted article URLs.")
 
     # 3. Identify new articles
     new_articles = [
@@ -82,7 +82,7 @@ async def run_check(bot: Bot):
             logger.warning(f"Article missing 'link', skipping: {article.get('title', 'N/A')}")
             continue
         original_title = article.get('title', 'No Title Provided')
-        logger.info(f"Processing new article: {original_title} ({article_link})")
+        logger.debug(f"Processing new article: {original_title} ({article_link})")
 
         # --- Fetch Article Content ---
         content_data = await api_client.get_article_content(article_link)
@@ -103,17 +103,16 @@ async def run_check(bot: Bot):
         # 5. Translate Title, Body and Generate Hashtags using OpenAI
         translation_result = None
         try:
-            logger.info(f"--> Calling OpenAI translator for: {article_link}")
+            logger.debug(f"--> Calling OpenAI translator for: {article_link}")
             translation_result = await openai_translator.translate_and_summarize_article(
                 title=original_title,
                 body=original_body
             )
-            logger.info(f"<-- Returned from OpenAI translator for: {article_link}. Result: {'Success' if translation_result else 'Failure'}")
             if translation_result:
                 increment_stat("translations_success")
             else:
                 increment_stat("translations_fail")
-                logger.error(f"Failed to get translation/hashtags from OpenAI for {article_link}. Skipping article.")
+                logger.error(f"Failed to get translation/hashtags from OpenAI for {article_link}. Result: {'Success' if translation_result else 'Failure'}. Skipping article.")
                 continue # Skip this article if OpenAI call fails
         except Exception as e:
             increment_stat("translations_fail")
@@ -237,7 +236,7 @@ async def run_check(bot: Bot):
         # 8. Update posted articles file (conditionally)
         # Only add if skipped OR if posting was attempted and successful
         if should_skip or post_success:
-            logger.info(f"Adding article to posted list. Skipped: {should_skip}, Message ID: {message_id}, URL: {article_link}")
+            logger.debug(f"Adding article to posted list. Skipped: {should_skip}, Message ID: {message_id}, URL: {article_link}")
             data_handler.add_posted_article(
                 filepath=config_manager.get("posted_articles_file"),
                 url=article_link,
