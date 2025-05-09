@@ -101,7 +101,7 @@ async def run_check(bot: Bot):
             # Extract main_image_url if present
             if 'main_image_url' in content_data and content_data['main_image_url']:
                 main_image_url = content_data['main_image_url']
-                logger.info(f"Found main_image_url: {main_image_url} for article: {article_link}")
+                logger.debug(f"Found main_image_url: {main_image_url} for article: {article_link}")
             else:
                 logger.debug(f"No main_image_url found for article: {article_link}")
 
