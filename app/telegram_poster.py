@@ -12,13 +12,14 @@ logger = logging.getLogger(__name__)
 # issues with async event loops if the main script structure changes.
 # Let's initialize per call for simplicity here.
 
-async def post_message(bot: Bot, message: str):
+async def post_message(bot: Bot, message: str, image_url: str = None):
     """
-    Sends a message to the configured Telegram channel using the provided bot instance.
+    Sends a message (text or photo with caption) to the configured Telegram channel.
 
     Args:
         bot: The initialized telegram.Bot instance.
-        message: The text message to send. Supports MarkdownV2 formatting.
+        message: The text message or caption for the photo. Supports MarkdownV2 formatting.
+        image_url: Optional URL of the image to send.
 
     Returns:
         The message_id of the sent message if successful, None otherwise.
@@ -41,37 +42,46 @@ async def post_message(bot: Bot, message: str):
     logger.debug(f"Attempting to send message to Telegram channel {channel_id} using provided bot instance...")
 
     try:
-        # Note: Sending messages requires an async context if using python-telegram-bot v20+
-        # The main loop will need to handle the async execution.
-        # Store the returned Message object
-        sent_message = await bot.send_message(
-            chat_id=channel_id,
-            text=message,
-            parse_mode=ParseMode.MARKDOWN_V2 # Use MarkdownV2 for formatting
-            # Consider adding disable_web_page_preview=True if desired
-        )
-        logger.info(f"Successfully sent message (ID: {sent_message.message_id}) to Telegram channel {channel_id}.")
-        # Return the message_id
+        if image_url:
+            logger.info(f"Sending photo with caption to {channel_id}...")
+            sent_message = await bot.send_photo(
+                chat_id=channel_id,
+                photo=image_url,
+                caption=message,
+                parse_mode=ParseMode.MARKDOWN_V2
+            )
+            logger.info(f"Successfully sent photo (ID: {sent_message.message_id}) to Telegram channel {channel_id}.")
+        else:
+            logger.info(f"Sending text message to {channel_id}...")
+            sent_message = await bot.send_message(
+                chat_id=channel_id,
+                text=message,
+                parse_mode=ParseMode.MARKDOWN_V2
+                # Consider adding disable_web_page_preview=True if desired
+            )
+            logger.info(f"Successfully sent text message (ID: {sent_message.message_id}) to Telegram channel {channel_id}.")
+        
         return sent_message.message_id
     except BadRequest as e: # Catch BadRequest specifically
         # Log the specific error and the message content
-        log_message = f"Telegram BadRequest sending message to {channel_id}: {e}"
-        log_message += f"\nProblematic message content:\n---\n{message}\n---"
-        logger.error(log_message) # Log as error, traceback might not be needed for parsing errors
-        # Consider if other specific handling is needed for BadRequest
-        return None # Return None on BadRequest
+        log_message = f"Telegram BadRequest sending to {channel_id}: {e}"
+        if image_url:
+            log_message += f"\nImage URL: {image_url}"
+        log_message += f"\nProblematic caption/message content:\n---\n{message}\n---"
+        logger.error(log_message)
+        return None
     except TelegramError as e:
-        # Catch other Telegram API errors (e.g., invalid token, chat not found, bot blocked)
-        logger.exception(f"Telegram API error sending message to {channel_id}: {e}")
-        # You might want more specific error handling here based on e.message or e.code
+        # Catch other Telegram API errors
+        logger.exception(f"Telegram API error sending to {channel_id} (Image URL: {image_url}): {e}")
         if "chat not found" in str(e):
             logger.error("The configured TELEGRAM_CHANNEL_ID might be incorrect or the bot isn't added.")
         elif "bot token is invalid" in str(e):
              logger.error("The configured TELEGRAM_BOT_TOKEN is invalid.")
+        # Add more specific error checks if needed, e.g., for invalid image URLs
         return None
     except Exception as e:
-        # Catch other potential exceptions (network issues, etc.)
-        logger.exception(f"Unexpected error sending message via Telegram: {e}")
+        # Catch other potential exceptions
+        logger.exception(f"Unexpected error sending via Telegram (Image URL: {image_url}): {e}")
         return None
     finally:
         # Ensure the bot session is closed if necessary (depends on library version and usage)

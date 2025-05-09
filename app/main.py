@@ -87,17 +87,26 @@ async def run_check(bot: Bot):
         # --- Fetch Article Content ---
         content_data = await api_client.get_article_content(article_link)
         original_body = ""
-        if content_data and 'body' in content_data:
-            body_text = content_data['body']
-            if body_text and isinstance(body_text, str):
-                original_body = body_text
+        main_image_url = None
+        if content_data:
+            if 'body' in content_data:
+                body_text = content_data['body']
+                if body_text and isinstance(body_text, str):
+                    original_body = body_text
+                else:
+                    logger.warning(f"Article body is empty or not a string for {article_link}.")
             else:
-                logger.warning(f"Article body is empty or not a string for {article_link}.")
-        else:
-            logger.warning(f"Could not get body content for {article_link}.")
-            # Don't skip yet, maybe translation can work with title only? Or maybe skip?
-            # Let's skip if body is essential for translation/posting quality.
-            # increment_stat("fetches_fail") # Or a different stat?
+                logger.warning(f"Article body is missing in content_data for {article_link}.")
+
+            # Extract main_image_url if present
+            if 'main_image_url' in content_data and content_data['main_image_url']:
+                main_image_url = content_data['main_image_url']
+                logger.info(f"Found main_image_url: {main_image_url} for article: {article_link}")
+            else:
+                logger.debug(f"No main_image_url found for article: {article_link}")
+
+        if not original_body: # If body is still empty after checks
+            logger.warning(f"Could not get body content for {article_link}. Skipping article.")
             continue # Skip this article if body is not found
 
         # 5. Translate Title, Body and Generate Hashtags using OpenAI
@@ -217,14 +226,14 @@ async def run_check(bot: Bot):
             if message:
                 logger.debug(f"Formatted message for {article_link}:\n{message}")
                 try:
-                    # Pass the bot instance here
-                    message_id = await telegram_poster.post_message(bot, message)
+                    # Pass the bot instance and image_url here
+                    message_id = await telegram_poster.post_message(bot, message, image_url=main_image_url)
                     if message_id is not None:
                         increment_stat("posts_success")
                         post_success = True
                     else:
                         increment_stat("posts_fail")
-                        logger.error(f"Failed to post article to Telegram (received None message_id): {article_link}")
+                        logger.error(f"Failed to post article to Telegram (received None message_id): {article_link} (Image URL: {main_image_url})")
                 except Exception as e:
                     increment_stat("posts_fail")
                     logger.exception(f"Error posting message for {article_link}: {e}")
