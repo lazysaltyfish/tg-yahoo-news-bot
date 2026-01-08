@@ -192,54 +192,64 @@ async def run_check(bot: Bot):
                     escaped_tags = [escape_markdown_v2(tag) for tag in valid_hashtags]
                     hashtags_part = "\n\n" + " ".join(escaped_tags)
 
-            # --- Calculate Lengths and Truncate Body if Needed ---
-            MAX_TELEGRAM_MESSAGE_LENGTH = 4096
-            TRUNCATION_SUFFIX = escape_markdown_v2("(未完，请看原文)") # Suffix for truncated body
+            # --- Construct Final Message Components for telegram_poster ---
+            # The telegram_poster.post_message function will handle final assembly and truncation.
+            # title_part is f"*{escaped_title}*\n\n"
+            # content_part is f"{escaped_content}\n\n" or ""
+            # link_part is f"[原文链接]({article_link})"
+            # time_part is f"\n_{escaped_time}_" or ""
+            # hashtags_part is f"\n\n" + " ".join(escaped_tags) or ""
 
-            # Calculate length of non-body parts
-            fixed_parts_length = len(title_part) + len(link_part) + len(time_part) + len(hashtags_part)
+            title_for_telegram_poster = f"*{escaped_title}*" # Pure title, Markdown formatted
 
-            # Calculate maximum allowed length for the body content
-            max_content_length = MAX_TELEGRAM_MESSAGE_LENGTH - fixed_parts_length - len(TRUNCATION_SUFFIX)
-
-            # Truncate the content_part if it makes the total message too long
-            if escaped_content and len(content_part) > max_content_length:
-                 if max_content_length > 0:
-                    # Truncate the original escaped_content string
-                    truncated_escaped_content = escaped_content[:max_content_length] + TRUNCATION_SUFFIX
-                    # Recreate the content_part with the truncated version
-                    content_part = f"{truncated_escaped_content}\n\n"
-                    logger.warning(f"Message body for {article_link} was too long. Truncated body content.")
-                 else:
-                    # Edge case: Fixed parts alone are too long or leave no space for body
-                    content_part = "" # Remove body entirely if no space
-                    logger.warning(f"Message for {article_link} too long even without body. Removing body content.")
-
-
-            # --- Construct Final Message ---
-            message = title_part + content_part + link_part + time_part + hashtags_part
+            body_for_telegram_poster = ""
+            if escaped_content: # This is the main body of the article
+                body_for_telegram_poster += escaped_content
+            
+            # Add link_part, ensuring separation
+            if body_for_telegram_poster:
+                body_for_telegram_poster += f"\n\n{link_part}"
+            else:
+                body_for_telegram_poster += link_part # If no content, link is first
+            
+            # time_part already starts with \n if it exists and is not empty
+            if time_part: # time_part is f"\n_{escaped_time}_"
+                body_for_telegram_poster += time_part
+            
+            # hashtags_part already starts with \n\n if it exists and is not empty
+            if hashtags_part: # hashtags_part is f"\n\n{escaped_tags_joined}"
+                body_for_telegram_poster += hashtags_part
+            
+            # The old 'message' variable is no longer the primary source for posting.
+            # We use title_for_telegram_poster and body_for_telegram_poster.
 
         # 7. Post to Telegram (conditionally)
         message_id = None
         post_success = False
         if not should_skip:
-            if message:
-                logger.debug(f"Formatted message for {article_link}:\n{message}")
+            # Check if there's a title to post, as it's essential.
+            if title_for_telegram_poster:
+                logger.debug(f"Preparing to send to Telegram. Title: '{title_for_telegram_poster}'. Body: '{body_for_telegram_poster}'. Image: {main_image_url}")
                 try:
-                    # Pass the bot instance and image_url here
-                    message_id = await telegram_poster.post_message(bot, message, image_url=main_image_url)
+                    # Pass the bot instance, title, body, and image_url
+                    message_id = await telegram_poster.post_message(
+                        bot,
+                        title=title_for_telegram_poster,
+                        body=body_for_telegram_poster,
+                        image_url=main_image_url
+                    )
                     if message_id is not None:
                         increment_stat("posts_success")
                         post_success = True
                     else:
                         increment_stat("posts_fail")
-                        logger.error(f"Failed to post article to Telegram (received None message_id): {article_link} (Image URL: {main_image_url})")
+                        logger.error(f"Failed to post article to Telegram (received None message_id): {article_link} (Title: {title_for_telegram_poster}, Image URL: {main_image_url})")
                 except Exception as e:
                     increment_stat("posts_fail")
-                    logger.exception(f"Error posting message for {article_link}: {e}")
+                    logger.exception(f"Error posting message for {article_link} (Title: {title_for_telegram_poster}): {e}")
             else:
-                 increment_stat("posts_fail") # Count as failure if message is empty
-                 logger.error(f"Message formatting resulted in empty message for {article_link}. Cannot post.")
+                 increment_stat("posts_fail") # Count as failure if title is empty
+                 logger.error(f"Formatted title is empty for {article_link}. Cannot post.")
         # If should_skip is True, message_id remains None, post_success remains False
 
         # 8. Update posted articles file (conditionally)
