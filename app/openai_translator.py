@@ -94,10 +94,26 @@ async def translate_and_summarize_article(title: str, body: str) -> dict | None:
             response_format={"type": "json_object"} # Enforce JSON output mode
         )
 
-        # Extract the response content
-        response_content = response.choices[0].message.content
+        # Extract the response content with robust null checks
+        if not response.choices:
+            logger.error(f"OpenAI response has no choices. Full response: {response}")
+            return None
+
+        choice = response.choices[0]
+        finish_reason = getattr(choice, 'finish_reason', 'unknown')
+
+        if choice.message is None:
+            logger.error(f"OpenAI response message is None. finish_reason: {finish_reason}, title: {title[:50]}...")
+            return None
+
+        # Check for refusal (some APIs set this when content is filtered)
+        if hasattr(choice.message, 'refusal') and choice.message.refusal:
+            logger.error(f"OpenAI refused to respond: {choice.message.refusal}, title: {title[:50]}...")
+            return None
+
+        response_content = choice.message.content
         if not response_content:
-            logger.error("OpenAI response content is empty.")
+            logger.error(f"OpenAI response content is empty. finish_reason: {finish_reason}, title: {title[:50]}...")
             return None
 
         logger.debug(f"Raw OpenAI response: {response_content[:200]}...") # Log snippet
