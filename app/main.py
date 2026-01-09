@@ -76,6 +76,7 @@ async def run_check(bot: Bot):
 
     # 4. Process each new article
     processed_count = 0
+    articles_to_save = []  # 收集要保存的文章，循环结束后批量写入
     for article in new_articles:
         article_link = article.get('link') # Use 'link' key
         if not article_link: # Skip if link is missing for some reason
@@ -256,13 +257,12 @@ async def run_check(bot: Bot):
         # Only add if skipped OR if posting was attempted and successful
         if should_skip or post_success:
             logger.debug(f"Adding article to posted list. Skipped: {should_skip}, Message ID: {message_id}, URL: {article_link}")
-            data_handler.add_posted_article(
-                filepath=config_manager.get("posted_articles_file"),
-                url=article_link,
-                title=original_title,
-                message_id=message_id, # Will be None if skipped
-                skipped=should_skip
-            )
+            articles_to_save.append({
+                'url': article_link,
+                'title': original_title,
+                'message_id': message_id,
+                'skipped': should_skip
+            })
         elif not should_skip and not post_success:
             logger.warning(f"Article posting failed and was not skipped. NOT adding to posted list. URL: {article_link}")
 
@@ -271,6 +271,13 @@ async def run_check(bot: Bot):
 
         # A small delay between processing articles within a run
         await asyncio.sleep(5) # Keep the 5-second delay
+
+    # 9. 批量写入所有处理过的文章
+    if articles_to_save:
+        data_handler.add_posted_articles_batch(
+            filepath=config_manager.get("posted_articles_file"),
+            articles=articles_to_save
+        )
 
     logger.info(f"--- run_check function finished. Processed {processed_count} new articles this run. ---")
 

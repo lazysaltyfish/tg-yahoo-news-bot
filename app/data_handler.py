@@ -129,3 +129,68 @@ def add_posted_article(filepath: str, url: str, title: str, message_id: int | No
     except Exception as e:
         # Catch-all for other unexpected errors like directory creation failure
         logger.exception(f"An unexpected error occurred in add_posted_article for {filepath}: {e}")
+
+
+def add_posted_articles_batch(filepath: str, articles: list[dict]):
+    """
+    批量添加多篇文章到 JSON 文件，只执行一次文件写入。
+
+    Args:
+        filepath: JSON 文件路径
+        articles: 文章列表，每个元素包含 url, title, message_id, skipped
+    """
+    if not articles:
+        logger.debug("No articles to add in batch, skipping write.")
+        return
+
+    try:
+        os.makedirs(os.path.dirname(filepath), exist_ok=True)
+
+        # 确保文件存在
+        try:
+            with open(filepath, 'a', encoding='utf-8') as f:
+                pass
+        except IOError as e:
+            logger.error(f"Could not ensure file exists at {filepath}: {e}")
+            return
+
+        with open(filepath, 'r+', encoding='utf-8') as f:
+            fcntl.flock(f, fcntl.LOCK_EX)
+            try:
+                f.seek(0)
+                try:
+                    current_data = json.load(f)
+                    if not isinstance(current_data, dict):
+                        logger.warning(f"Data in {filepath} is not a dict. Overwriting.")
+                        current_data = {}
+                except json.JSONDecodeError:
+                    logger.warning(f"Could not decode JSON from {filepath}. Starting fresh.")
+                    current_data = {}
+
+                # 批量添加文章
+                added_count = 0
+                for article in articles:
+                    url = article['url']
+                    if url not in current_data:
+                        current_data[url] = {
+                            "title": article['title'],
+                            "tg_channel_msg_id": article['message_id'],
+                            "skipped": article['skipped']
+                        }
+                        added_count += 1
+
+                if added_count > 0:
+                    f.seek(0)
+                    f.truncate()
+                    json.dump(current_data, f, ensure_ascii=False, indent=4)
+                    logger.info(f"Batch added {added_count} articles to {filepath}")
+                else:
+                    logger.debug("All articles already exist, no write needed.")
+
+            finally:
+                fcntl.flock(f, fcntl.LOCK_UN)
+
+    except PermissionError as e:
+        logger.error(f"Permission denied for {filepath}: {e}")
+    except Exception as e:
+        logger.exception(f"Unexpected error in add_posted_articles_batch: {e}")
