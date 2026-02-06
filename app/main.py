@@ -9,7 +9,7 @@ from telegram.ext import Application, ApplicationBuilder
 # Import application modules
 from app import logger_setup, api_client, data_handler, telegram_poster, openai_translator
 from app.config import config_manager
-from app.stats_manager import increment_stat, reset_all_stats # Use convenience functions
+from app.stats_manager import increment_stat, increment_daily_stat, reset_all_stats # Use convenience functions
 from app.bot_interface import setup_bot_handlers # Import the handler setup function
 # --- Setup ---
 logger_setup.setup_logging()
@@ -76,12 +76,15 @@ async def run_check(bot: Bot):
 
     # 4. Process each new article
     processed_count = 0
+    jst = pytz.timezone('Asia/Tokyo')
     articles_to_save = []  # 收集要保存的文章，循环结束后批量写入
     for article in new_articles:
         article_link = article.get('link') # Use 'link' key
         if not article_link: # Skip if link is missing for some reason
             logger.warning(f"Article missing 'link', skipping: {article.get('title', 'N/A')}")
             continue
+        date_key = datetime.now(jst).strftime('%Y-%m-%d')
+        increment_daily_stat(date_key, "total")
         original_title = article.get('title', 'No Title Provided')
         logger.debug(f"Processing new article: {original_title} ({article_link})")
 
@@ -108,6 +111,7 @@ async def run_check(bot: Bot):
 
         if not original_body: # If body is still empty after checks
             logger.warning(f"Could not get body content for {article_link}. Skipping article.")
+            increment_daily_stat(date_key, "fail")
             continue # Skip this article if body is not found
 
         # 5. Translate Title, Body and Generate Hashtags using OpenAI
@@ -123,10 +127,12 @@ async def run_check(bot: Bot):
             else:
                 increment_stat("translations_fail")
                 logger.error(f"Failed to get translation/hashtags from OpenAI for {article_link}. Result: {'Success' if translation_result else 'Failure'}. Skipping article.")
+                increment_daily_stat(date_key, "fail")
                 continue # Skip this article if OpenAI call fails
         except Exception as e:
             increment_stat("translations_fail")
             logger.exception(f"Error during OpenAI translation for {article_link}: {e}. Skipping article.")
+            increment_daily_stat(date_key, "fail")
             continue
 
         translated_title = translation_result.get('translated_title', '')
@@ -136,6 +142,7 @@ async def run_check(bot: Bot):
         if not translated_title: # Title is essential
              logger.error(f"OpenAI did not return a translated title for {article_link}. Skipping article.")
              # Already counted as translation fail above
+             increment_daily_stat(date_key, "fail")
              continue
 
         # --- Check for Skip Keywords in Hashtags ---
@@ -152,6 +159,8 @@ async def run_check(bot: Bot):
                         break
                 if should_skip:
                     break
+        if should_skip:
+            increment_daily_stat(date_key, "skipped")
 
         # 6. Format Message (only if not skipping)
         message = ""
@@ -242,14 +251,18 @@ async def run_check(bot: Bot):
                     if message_id is not None:
                         increment_stat("posts_success")
                         post_success = True
+                        increment_daily_stat(date_key, "success")
                     else:
                         increment_stat("posts_fail")
+                        increment_daily_stat(date_key, "fail")
                         logger.error(f"Failed to post article to Telegram (received None message_id): {article_link} (Title: {title_for_telegram_poster}, Image URL: {main_image_url})")
                 except Exception as e:
                     increment_stat("posts_fail")
+                    increment_daily_stat(date_key, "fail")
                     logger.exception(f"Error posting message for {article_link} (Title: {title_for_telegram_poster}): {e}")
             else:
                  increment_stat("posts_fail") # Count as failure if title is empty
+                 increment_daily_stat(date_key, "fail")
                  logger.error(f"Formatted title is empty for {article_link}. Cannot post.")
         # If should_skip is True, message_id remains None, post_success remains False
 

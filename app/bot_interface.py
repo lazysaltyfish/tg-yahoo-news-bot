@@ -8,7 +8,7 @@ from telegram.constants import ParseMode
 
 # Import necessary components from our application
 from app.config import config_manager
-from app.stats_manager import get_current_stats, Stats  # Import the Stats dataclass too
+from app.stats_manager import get_current_stats, get_daily_stats, Stats  # Import the Stats dataclass too
 from app.data_handler import load_posted_articles
 from app.config import BOT_START_TIME_UTC
 
@@ -86,6 +86,22 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     posted_db_line = escape_markdown_v2(f"  - Successfully Posted: {total_posted_successfully}")
     skipped_db_line = escape_markdown_v2(f"  - Skipped (Keywords) in DB: {total_skipped_in_db}")
 
+    # --- Daily Stats (JST, last 7 days) ---
+    daily_header = escape_markdown_v2("Daily (JST, last 7 days):")
+    daily_stats = get_daily_stats(last_days=7)
+    daily_lines = []
+    if daily_stats:
+        for date_key, day in daily_stats:
+            denom = day.total - day.skipped
+            if denom > 0:
+                error_rate = f"{(day.fail / denom) * 100:.1f}%"
+            else:
+                error_rate = "N/A"
+            line = f"  - {date_key}: success {day.success}, fail {day.fail}, skipped {day.skipped}, error rate {error_rate}"
+            daily_lines.append(escape_markdown_v2(line))
+    else:
+        daily_lines.append(escape_markdown_v2("  - No data yet"))
+
     message_lines = [
         "*📊 Bot Statistics*", # Keep Markdown syntax as is
         "",
@@ -96,6 +112,9 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         translations_line,
         posts_line,
         skipped_runtime_line,
+        "",
+        f"*{daily_header}*",
+        *daily_lines,
         "",
         f"*{persistent_header}*", # Apply Markdown after escaping text
         total_db_line,
